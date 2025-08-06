@@ -27,14 +27,9 @@ export default function PdfViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
 
-  // Получаем проект и страницы
-  const project = useQuery(api.projects.getProject, { projectId });
+  // Получаем проект с URL для PDF файла и страницы
+  const project = useQuery(api.projects.getProjectWithPdfUrl, { projectId });
   const pages = useQuery(api.projects.getProjectPages, { projectId });
-
-  // Получаем URL для PDF файла
-  const pdfUrl = project?.pdfFileId ? 
-    `https://${process.env.NEXT_PUBLIC_CONVEX_SITE_URL}/api/storage/${project.pdfFileId}` : 
-    null;
 
   useEffect(() => {
     if (onScaleChange) {
@@ -47,6 +42,9 @@ export default function PdfViewer({
       onPanChange(pan);
     }
   }, [pan, onPanChange]);
+
+  // Получаем URL для PDF из проекта
+  const pdfUrl = project?.pdfUrl;
 
   const handleZoomIn = () => {
     setScale(prev => Math.min(prev * 1.2, 5));
@@ -156,10 +154,12 @@ export default function PdfViewer({
   if (!pdfUrl) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-red-500">Ошибка загрузки PDF файла</div>
+        <div className="text-red-500">PDF файл не найден или недоступен</div>
       </div>
     );
   }
+
+ 
 
   return (
     <div className="flex-1 flex flex-col bg-gray-100">

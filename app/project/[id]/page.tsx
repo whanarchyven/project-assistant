@@ -1,11 +1,7 @@
-"use client";
 
-import React, { useState } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '../../../convex/_generated/api';
 import { Id } from '../../../convex/_generated/dataModel';
-import ProjectLayout from '../../../components/ProjectLayout';
-import PdfViewer from '../../../components/PdfViewer';
+import ProjectPageClient from './ProjectPageClient';
+
 
 interface ProjectPageProps {
   params: {
@@ -13,41 +9,8 @@ interface ProjectPageProps {
   };
 }
 
-export default function ProjectPage({ params }: ProjectPageProps) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [currentStage, setCurrentStage] = useState('measurement');
+export default async function ProjectPage({ params }: ProjectPageProps) {
+  const projectId = (await params).id as Id<"projects">;
   
-  const projectId = params.id as Id<"projects">;
-  const project = useQuery(api.projects.getProject, { projectId });
-  const pages = useQuery(api.projects.getProjectPages, { projectId });
-
-  if (project === undefined || pages === undefined) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Загрузка проекта...</div>
-      </div>
-    );
-  }
-
-  if (project === null) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-red-500">Проект не найден</div>
-      </div>
-    );
-  }
-
-  return (
-    <ProjectLayout
-      projectId={projectId}
-      currentPage={currentPage}
-      currentStage={currentStage}
-    >
-      <PdfViewer
-        projectId={projectId}
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-      />
-    </ProjectLayout>
-  );
+  return <ProjectPageClient projectId={projectId} />;
 } 

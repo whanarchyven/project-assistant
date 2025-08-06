@@ -109,6 +109,48 @@ export const getProject = query({
   },
 });
 
+// Получение проекта с URL для PDF файла
+export const getProjectWithPdfUrl = query({
+  args: {
+    projectId: v.id("projects"),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id("projects"),
+      _creationTime: v.number(),
+      name: v.string(),
+      userId: v.id("users"),
+      pdfFileId: v.id("_storage"),
+      pdfUrl: v.union(v.string(), v.null()),
+      ceilingHeight: v.optional(v.number()),
+      scale: v.optional(v.object({
+        knownLength: v.number(),
+        pixelLength: v.number(),
+      })),
+    }),
+    v.null()
+  ),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== userId) {
+      return null;
+    }
+
+    // Генерируем URL для PDF файла
+    const pdfUrl = await ctx.storage.getUrl(project.pdfFileId);
+
+    return {
+      ...project,
+      pdfUrl,
+    };
+  },
+});
+
 // Обновление масштаба проекта
 export const updateProjectScale = mutation({
   args: {
@@ -464,4 +506,8 @@ export const createPage = internalMutation({
       pdfFileId: args.pdfFileId,
     });
   },
-}); 
+});
+
+
+
+ 
