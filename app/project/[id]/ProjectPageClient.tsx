@@ -14,6 +14,7 @@ interface ProjectPageClientProps {
 export default function ProjectPageClient({ projectId }: ProjectPageClientProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [currentStage, setCurrentStage] = useState('measurement');
+  const [numPages, setNumPages] = useState(0);
   
   const project = useQuery(api.projects.getProject, { projectId });
   const pages = useQuery(api.projects.getProjectPages, { projectId });
@@ -44,6 +45,7 @@ export default function ProjectPageClient({ projectId }: ProjectPageClientProps)
         projectId={projectId}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
+        onNumPagesChange={setNumPages}
       />
     </ProjectLayout>
   );

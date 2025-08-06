@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import { Id } from '../convex/_generated/dataModel';
+import PdfDocument from './PdfDocument';
 
 interface PdfViewerProps {
   projectId: Id<"projects">;
@@ -9,6 +10,7 @@ interface PdfViewerProps {
   onPageChange: (page: number) => void;
   onScaleChange?: (scale: number) => void;
   onPanChange?: (pan: { x: number; y: number }) => void;
+  onNumPagesChange?: (numPages: number) => void;
 }
 
 export default function PdfViewer({
@@ -17,12 +19,14 @@ export default function PdfViewer({
   onPageChange,
   onScaleChange,
   onPanChange,
+  onNumPagesChange,
 }: PdfViewerProps) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [numPages, setNumPages] = useState(0);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -45,6 +49,12 @@ export default function PdfViewer({
 
   // Получаем URL для PDF из проекта
   const pdfUrl = project?.pdfUrl;
+
+  // Обработчик успешной загрузки документа
+  const handleDocumentLoadSuccess = useCallback((numPages: number) => {
+    setNumPages(numPages);
+    onNumPagesChange?.(numPages);
+  }, [onNumPagesChange]);
 
   const handleZoomIn = () => {
     setScale(prev => Math.min(prev * 1.2, 5));
@@ -130,13 +140,13 @@ export default function PdfViewer({
         break;
       case 'ArrowLeft':
         e.preventDefault();
-        if (pages && currentPage > 1) {
+        if (currentPage > 1) {
           onPageChange(currentPage - 1);
         }
         break;
       case 'ArrowRight':
         e.preventDefault();
-        if (pages && currentPage < pages.length) {
+        if (currentPage < numPages) {
           onPageChange(currentPage + 1);
         }
         break;
@@ -179,12 +189,12 @@ export default function PdfViewer({
           </button>
           
           <span className="text-sm text-gray-600">
-            Страница {currentPage} из {pages.length}
+            Страница {currentPage} из {numPages}
           </span>
           
           <button
             onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage >= pages.length}
+            disabled={currentPage >= numPages}
             className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Следующая страница"
           >
@@ -253,18 +263,15 @@ export default function PdfViewer({
             transformOrigin: 'center',
           }}
         >
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
-              <div className="text-gray-500">Загрузка PDF...</div>
-            </div>
+          {pdfUrl && (
+            <PdfDocument
+              url={pdfUrl}
+              currentPage={currentPage}
+              scale={scale}
+              onPageChange={onPageChange}
+              onDocumentLoadSuccess={handleDocumentLoadSuccess}
+            />
           )}
-          
-          <iframe
-            src={`${pdfUrl}#page=${currentPage}`}
-            className="w-full h-full border-0"
-            onLoad={() => setIsLoading(false)}
-            style={{ minWidth: '100%', minHeight: '100%' }}
-          />
         </div>
       </div>
 
