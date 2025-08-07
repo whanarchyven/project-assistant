@@ -33,6 +33,11 @@ export default function DrawingCanvas({
   // Получаем страницу проекта
   const pages = useQuery(api.projects.getProjectPages, { projectId });
   const currentPageData = pages?.find(page => page.pageNumber === currentPage);
+  
+  console.log('pages:', pages);
+  console.log('pages content:', pages?.[0]);
+  console.log('currentPage:', currentPage);
+  console.log('currentPageData:', currentPageData);
 
   // Получаем SVG элементы из базы данных
   const dbElements = useQuery(
@@ -79,27 +84,47 @@ export default function DrawingCanvas({
   // Синхронизация элементов из базы данных
   useEffect(() => {
     if (dbElements) {
+      console.log('dbElements received:', dbElements);
       const convertedElements: SvgElement[] = dbElements.map(dbEl => ({
         id: dbEl._id,
         type: dbEl.elementType,
         data: dbEl.data,
         style: dbEl.style,
       }));
+      console.log('Converted elements:', convertedElements);
       setElements(convertedElements);
     }
   }, [dbElements]);
 
   // Обработчики для SVG Canvas
   const handleElementsChange = useCallback(async (newElements: SvgElement[]) => {
-    if (!currentPageData) return;
+    console.log('handleElementsChange called with:', newElements.length, 'elements');
+    console.log('currentPageData:', currentPageData);
+    
+    // Временно используем первую страницу, если currentPageData не найден
+    let targetPageData = currentPageData;
+    if (!targetPageData && pages && pages.length > 0) {
+      targetPageData = pages[0];
+      console.log('Using first page as fallback:', targetPageData);
+    }
+    
+    if (!targetPageData) {
+      console.log('No page data available, returning');
+      return;
+    }
 
-    // Находим новые элементы (которые не имеют _id)
-    const newElementsToCreate = newElements.filter(el => !el.id.startsWith('element_'));
+    console.log('Current elements:', elements.length);
+    console.log('New elements:', newElements);
+
+    // Находим новые элементы (которые начинаются с 'element_')
+    const newElementsToCreate = newElements.filter(el => el.id.startsWith('element_'));
+    console.log('Elements to create:', newElementsToCreate.length);
     
     // Создаем новые элементы в базе данных
     for (const element of newElementsToCreate) {
+      console.log('Creating element:', element);
       await createElement({
-        pageId: currentPageData._id,
+        pageId: targetPageData._id,
         stageType: currentStage as any,
         elementType: element.type,
         data: element.data,
@@ -107,8 +132,9 @@ export default function DrawingCanvas({
       });
     }
 
+    console.log('Setting elements to:', newElements);
     setElements(newElements);
-  }, [currentPageData, currentStage, createElement]);
+  }, [currentPageData, currentStage, createElement, elements]);
 
   const handleDrawingStart = useCallback(() => {
     setIsDrawing(true);
@@ -127,19 +153,46 @@ export default function DrawingCanvas({
 
 
   const handleClearAll = useCallback(async () => {
-    if (!currentPageData) return;
+    console.log('handleClearAll called');
+    console.log('currentPageData:', currentPageData);
+    console.log('pages:', pages);
+    console.log('currentStage:', currentStage);
     
-    await clearElements({
-      pageId: currentPageData._id,
-      stageType: currentStage as any,
-    });
+    // Временно используем первую страницу, если currentPageData не найден
+    let targetPageData = currentPageData;
+    if (!targetPageData && pages && pages.length > 0) {
+      targetPageData = pages[0];
+      console.log('Using first page as fallback for clear:', targetPageData);
+    }
+    
+    if (!targetPageData) {
+      console.log('No page data available for clear, just clearing local state');
+      setElements([]);
+      setSelectedElementId(null);
+      return;
+    }
+    
+    console.log('Clearing elements for page:', targetPageData._id);
+    try {
+      await clearElements({
+        pageId: targetPageData._id,
+        stageType: currentStage as any,
+      });
+      console.log('Clear elements mutation completed');
+    } catch (error) {
+      console.error('Error clearing elements:', error);
+    }
     setElements([]);
     setSelectedElementId(null);
-  }, [currentPageData, currentStage, clearElements]);
+  }, [currentPageData, pages, currentStage, clearElements]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (selectedElementId && !selectedElementId.startsWith('element_')) {
       await deleteElement({ elementId: selectedElementId as Id<"svgElements"> });
+      setElements(prev => prev.filter(el => el.id !== selectedElementId));
+      setSelectedElementId(null);
+    } else if (selectedElementId) {
+      // Удаляем элемент из локального состояния, если он еще не сохранен в БД
       setElements(prev => prev.filter(el => el.id !== selectedElementId));
       setSelectedElementId(null);
     }
@@ -178,6 +231,44 @@ export default function DrawingCanvas({
               Выбран элемент
             </span>
           )}
+        </div>
+      </div>
+
+      {/* Переключатель страниц - над всеми слоями */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          {/* Навигация по страницам */}
+          <button
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage <= 1}
+            className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Предыдущая страница"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          
+          <span className="text-sm text-gray-600">
+            Страница {currentPage} из {numPages}
+          </span>
+          
+          <button
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= numPages}
+            className="p-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Следующая страница"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-600">
+            Масштаб: {Math.round(scale * 100)}%
+          </span>
         </div>
       </div>
 

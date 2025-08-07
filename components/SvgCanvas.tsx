@@ -52,7 +52,7 @@ export default function SvgCanvas({
   const selectedElementId = externalSelectedElementId !== undefined ? externalSelectedElementId : internalSelectedElementId;
   const setSelectedElementId = onElementSelect || setInternalSelectedElementId;
 
-  // Преобразование координат мыши в координаты SVG
+  // Преобразование координат мыши в координаты PDF (без учета масштаба и панорамирования)
   const getSvgPoint = useCallback((clientX: number, clientY: number) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     
@@ -64,14 +64,15 @@ export default function SvgCanvas({
     const ctm = svg.getScreenCTM();
     if (ctm) {
       const svgPt = pt.matrixTransform(ctm.inverse());
+      // Возвращаем координаты в пространстве PDF (без учета pan и scale)
       return {
-        x: (svgPt.x - pan.x) / scale,
-        y: (svgPt.y - pan.y) / scale,
+        x: svgPt.x,
+        y: svgPt.y,
       };
     }
     
     return { x: 0, y: 0 };
-  }, [pan, scale]);
+  }, []);
 
   // Обработчики мыши
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -165,7 +166,11 @@ export default function SvgCanvas({
 
   const finishDrawing = useCallback(() => {
     if (currentElement) {
-      onElementsChange([...elements, currentElement]);
+      console.log('finishDrawing called with element:', currentElement);
+      console.log('Current elements:', elements);
+      const newElements = [...elements, currentElement];
+      console.log('New elements array:', newElements);
+      onElementsChange(newElements);
       setCurrentElement(null);
       onDrawingEnd();
     }
@@ -346,6 +351,9 @@ export default function SvgCanvas({
       fill: element.style.fill === 'transparent' || element.style.fill === 'none' ? 'none' : element.style.fill,
     };
 
+    // Компенсируем масштаб для strokeWidth
+    const adjustedStrokeWidth = style.strokeWidth / scale;
+
     switch (element.type) {
       case 'line':
         return (
@@ -356,7 +364,7 @@ export default function SvgCanvas({
             x2={element.data.x2}
             y2={element.data.y2}
             stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
+            strokeWidth={adjustedStrokeWidth}
             fill={style.fill}
             opacity={style.opacity}
           />
@@ -370,7 +378,7 @@ export default function SvgCanvas({
             width={element.data.width}
             height={element.data.height}
             stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
+            strokeWidth={adjustedStrokeWidth}
             fill={style.fill}
             opacity={style.opacity}
           />
@@ -383,7 +391,7 @@ export default function SvgCanvas({
             cy={element.data.cy}
             r={element.data.r}
             stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
+            strokeWidth={adjustedStrokeWidth}
             fill={style.fill}
             opacity={style.opacity}
           />
@@ -395,7 +403,7 @@ export default function SvgCanvas({
             x={element.data.x}
             y={element.data.y}
             fill={style.stroke}
-            fontSize="14"
+            fontSize={14 / scale}
             fontFamily="Arial"
           >
             {element.data.text}
@@ -409,7 +417,7 @@ export default function SvgCanvas({
             key={element.id}
             points={pointsString}
             stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
+            strokeWidth={adjustedStrokeWidth}
             fill={style.fill}
             opacity={style.opacity}
           />
@@ -433,6 +441,7 @@ export default function SvgCanvas({
         fill: 'transparent',
         pointerEvents: selectedTool === 'select' ? 'none' : 'auto',
       }}
+      viewBox={`0 0 ${width} ${height}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -468,7 +477,7 @@ export default function SvgCanvas({
             <polyline
               points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
               stroke="#3b82f6"
-              strokeWidth="2"
+              strokeWidth={2 / scale}
               fill="none"
               strokeDasharray="5,5"
             />
@@ -479,10 +488,10 @@ export default function SvgCanvas({
               key={index}
               cx={point.x}
               cy={point.y}
-              r="4"
+              r={4 / scale}
               fill="#3b82f6"
               stroke="#ffffff"
-              strokeWidth="2"
+              strokeWidth={2 / scale}
             />
           ))}
         </>
