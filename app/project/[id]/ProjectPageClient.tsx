@@ -5,7 +5,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 import { Id } from '../../../convex/_generated/dataModel';
 import ProjectLayout from '../../../components/ProjectLayout';
-import PdfViewer from '../../../components/PdfViewer';
+import DrawingCanvas from '../../../components/DrawingCanvas';
 
 interface ProjectPageClientProps {
   projectId: Id<"projects">;
@@ -41,11 +41,11 @@ export default function ProjectPageClient({ projectId }: ProjectPageClientProps)
       currentPage={currentPage}
       currentStage={currentStage}
     >
-      <PdfViewer
+      <DrawingCanvas
         projectId={projectId}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
-        onNumPagesChange={setNumPages}
+        currentStage={currentStage}
       />
     </ProjectLayout>
   );

@@ -62,4 +62,33 @@ export default defineSchema({
     })),
     properties: v.record(v.string(), v.union(v.string(), v.number(), v.boolean())),
   }).index("by_stage", ["stageId"]),
+
+  // SVG элементы для рисования на чертежах
+  svgElements: defineTable({
+    pageId: v.id("pages"),
+    stageType: v.union(
+      v.literal("measurement"), // Обмер
+      v.literal("installation"), // Монтаж
+      v.literal("demolition"), // Демонтаж
+      v.literal("electrical"), // Электрика
+      v.literal("plumbing"), // Сантехника
+      v.literal("finishing"), // Отделка
+      v.literal("materials") // Материалы
+    ),
+    elementType: v.union(
+      v.literal("line"),
+      v.literal("rectangle"),
+      v.literal("circle"),
+      v.literal("text"),
+      v.literal("polygon")
+    ),
+    data: v.any(), // данные элемента (координаты, размеры и т.д.)
+    style: v.object({
+      stroke: v.string(),
+      strokeWidth: v.number(),
+      fill: v.string(),
+      opacity: v.number(),
+    }),
+    order: v.number(), // порядок отображения элементов
+  }).index("by_page_and_stage", ["pageId", "stageType"]),
 });

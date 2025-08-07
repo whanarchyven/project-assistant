@@ -11,6 +11,7 @@ interface PdfViewerProps {
   onScaleChange?: (scale: number) => void;
   onPanChange?: (pan: { x: number; y: number }) => void;
   onNumPagesChange?: (numPages: number) => void;
+  disableMouseEvents?: boolean;
 }
 
 export default function PdfViewer({
@@ -20,6 +21,7 @@ export default function PdfViewer({
   onScaleChange,
   onPanChange,
   onNumPagesChange,
+  disableMouseEvents = false,
 }: PdfViewerProps) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -246,14 +248,17 @@ export default function PdfViewer({
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-gray-200"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
-        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+        onMouseDown={disableMouseEvents ? undefined : handleMouseDown}
+        onMouseMove={disableMouseEvents ? undefined : handleMouseMove}
+        onMouseUp={disableMouseEvents ? undefined : handleMouseUp}
+        onMouseLeave={disableMouseEvents ? undefined : handleMouseUp}
+        onWheel={disableMouseEvents ? undefined : handleWheel}
+        onKeyDown={disableMouseEvents ? undefined : handleKeyDown}
+        tabIndex={disableMouseEvents ? -1 : 0}
+        style={{ 
+          cursor: disableMouseEvents ? 'default' : (isDragging ? 'grabbing' : 'grab'),
+          pointerEvents: disableMouseEvents ? 'none' : 'auto'
+        }}
       >
         <div
           ref={pdfRef}

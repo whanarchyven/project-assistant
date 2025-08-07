@@ -70,7 +70,15 @@ export const getUserProjects = query({
       .order("desc")
       .collect();
 
-    return projects;
+    // Убираем userId из возвращаемых данных
+    return projects.map(project => ({
+      _id: project._id,
+      _creationTime: project._creationTime,
+      name: project.name,
+      pdfFileId: project.pdfFileId,
+      ceilingHeight: project.ceilingHeight,
+      scale: project.scale,
+    }));
   },
 });
 
@@ -84,7 +92,6 @@ export const getProject = query({
       _id: v.id("projects"),
       _creationTime: v.number(),
       name: v.string(),
-      userId: v.id("users"),
       pdfFileId: v.id("_storage"),
       ceilingHeight: v.optional(v.number()),
       scale: v.optional(v.object({
@@ -105,7 +112,15 @@ export const getProject = query({
       return null;
     }
 
-    return project;
+    // Убираем userId из возвращаемых данных
+    return {
+      _id: project._id,
+      _creationTime: project._creationTime,
+      name: project.name,
+      pdfFileId: project.pdfFileId,
+      ceilingHeight: project.ceilingHeight,
+      scale: project.scale,
+    };
   },
 });
 
@@ -119,7 +134,6 @@ export const getProjectWithPdfUrl = query({
       _id: v.id("projects"),
       _creationTime: v.number(),
       name: v.string(),
-      userId: v.id("users"),
       pdfFileId: v.id("_storage"),
       pdfUrl: v.union(v.string(), v.null()),
       ceilingHeight: v.optional(v.number()),
@@ -144,9 +158,15 @@ export const getProjectWithPdfUrl = query({
     // Генерируем URL для PDF файла
     const pdfUrl = await ctx.storage.getUrl(project.pdfFileId);
 
+    // Убираем userId из возвращаемых данных
     return {
-      ...project,
+      _id: project._id,
+      _creationTime: project._creationTime,
+      name: project.name,
+      pdfFileId: project.pdfFileId,
       pdfUrl,
+      ceilingHeight: project.ceilingHeight,
+      scale: project.scale,
     };
   },
 });
