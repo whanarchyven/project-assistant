@@ -52,7 +52,7 @@ export default function SvgCanvas({
   const selectedElementId = externalSelectedElementId !== undefined ? externalSelectedElementId : internalSelectedElementId;
   const setSelectedElementId = onElementSelect || setInternalSelectedElementId;
 
-  // Преобразование координат мыши в координаты SVG
+  // Преобразование координат мыши в координаты контента (PDF), инвертируя pan/scale
   const getSvgPoint = useCallback((clientX: number, clientY: number) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     
@@ -64,15 +64,17 @@ export default function SvgCanvas({
     const ctm = svg.getScreenCTM();
     if (ctm) {
       const svgPt = pt.matrixTransform(ctm.inverse());
-      // Возвращаем координаты в пространстве SVG (уже с учетом трансформации)
+      // Переводим в координаты контента: вычитаем pan и делим на scale
       return {
-        x: svgPt.x,
-        y: svgPt.y,
+        x: (svgPt.x - pan.x) / scale,
+        y: (svgPt.y - pan.y) / scale,
       };
     }
     
     return { x: 0, y: 0 };
-  }, []);
+  }, [pan, scale]);
+
+
 
   // Обработчики мыши
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -351,8 +353,8 @@ export default function SvgCanvas({
       fill: element.style.fill === 'transparent' || element.style.fill === 'none' ? 'none' : element.style.fill,
     };
 
-    // Применяем масштаб к толщине линии
-    const adjustedStrokeWidth = style.strokeWidth * scale;
+    // Толщина линии без дополнительного масштабирования (масштаб применится группой <g>)
+    const adjustedStrokeWidth = style.strokeWidth;
 
     switch (element.type) {
       case 'line':
@@ -403,7 +405,7 @@ export default function SvgCanvas({
             x={element.data.x}
             y={element.data.y}
             fill={style.stroke}
-            fontSize={14 * scale}
+            fontSize={14}
             fontFamily="Arial"
           >
             {element.data.text}
@@ -434,8 +436,6 @@ export default function SvgCanvas({
       height={height}
       className="absolute inset-0"
       style={{
-        transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-        transformOrigin: '0 0',
         background: 'none',
         backgroundColor: 'transparent',
         fill: 'transparent',
@@ -459,42 +459,42 @@ export default function SvgCanvas({
         e.stopPropagation();
       }}
       onContextMenu={(e) => e.preventDefault()}
-          >
-
-      
-              {/* Существующие элементы (только при рисовании) */}
+    >
+      <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
+        {/* Существующие элементы (только при рисовании) */}
         {selectedTool !== 'select' && elements.map(renderElement)}
-        
+
         {/* Текущий рисуемый элемент */}
         {currentElement && renderElement(currentElement)}
-      
-      {/* Точки многоугольника в процессе рисования */}
-      {selectedTool === 'polygon' && polygonPoints.length > 0 && (
-        <>
-          {/* Линии между точками */}
-          {polygonPoints.length > 1 && (
-            <polyline
-              points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
-              stroke="#3b82f6"
-              strokeWidth={2 * scale}
-              fill="none"
-              strokeDasharray="5,5"
-            />
-          )}
-          {/* Точки многоугольника */}
-          {polygonPoints.map((point, index) => (
-            <circle
-              key={index}
-              cx={point.x}
-              cy={point.y}
-              r={4 * scale}
-              fill="#3b82f6"
-              stroke="#ffffff"
-              strokeWidth={2 * scale}
-            />
-          ))}
-        </>
-      )}
+
+        {/* Точки многоугольника в процессе рисования */}
+        {selectedTool === 'polygon' && polygonPoints.length > 0 && (
+          <>
+            {/* Линии между точками */}
+            {polygonPoints.length > 1 && (
+              <polyline
+                points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
+                stroke="#3b82f6"
+                strokeWidth={2}
+                fill="none"
+                strokeDasharray="5,5"
+              />
+            )}
+            {/* Точки многоугольника */}
+            {polygonPoints.map((point, index) => (
+              <circle
+                key={index}
+                cx={point.x}
+                cy={point.y}
+                r={4}
+                fill="#3b82f6"
+                stroke="#ffffff"
+                strokeWidth={2}
+              />
+            ))}
+          </>
+        )}
+      </g>
     </svg>
   );
 } 

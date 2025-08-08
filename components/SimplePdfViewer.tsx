@@ -150,10 +150,10 @@ export default function SimplePdfViewer({
       >
         <div
           ref={pdfRef}
-          className="absolute inset-0 flex items-center justify-center"
+          className="absolute inset-0 flex items-start justify-start"
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-            transformOrigin: 'center',
+            transform: `translate(${pan.x}px, ${pan.y}px)`,
+            transformOrigin: '0 0',
           }}
         >
           <PdfDocument

@@ -61,7 +61,7 @@ export default function PdfDocument({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full relative">
+    <div className="flex flex-col items-start justify-start h-full relative" style={{ transformOrigin: '0 0' }}>
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
           <div className="text-center">
