@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon';
+export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window';
 
 interface DrawingToolsProps {
   selectedTool: DrawingTool;
@@ -61,10 +61,40 @@ export default function DrawingTools({
         </svg>
       ),
     },
+    {
+      id: 'room' as DrawingTool,
+      name: 'Комната',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <polygon points="5,3 19,3 21,8 21,21 3,21 3,5" className="stroke-emerald-600" />
+        </svg>
+      ),
+    },
+    {
+      id: 'window' as DrawingTool,
+      name: 'Окно',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <rect x="4" y="4" width="16" height="16" className="stroke-yellow-500" />
+        </svg>
+      ),
+    },
+    {
+      id: 'door' as DrawingTool,
+      name: 'Дверь',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <rect x="5" y="3" width="14" height="18" className="stroke-amber-800" />
+        </svg>
+      ),
+    },
   ];
 
-  const restrictedStageTools: Array<{ id: DrawingTool; name: string; icon: React.ReactNode }> = baseTools.filter(t => ['interact','select','rectangle'].includes(t.id));
-  let tools = (stageType === 'demolition' || stageType === 'installation') ? restrictedStageTools : baseTools;
+  const restrictedStageTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','rectangle'].includes(t.id)) as any;
+  const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','window','door'].includes(t.id)) as any;
+  let tools = baseTools;
+  if (stageType === 'demolition' || stageType === 'installation') tools = restrictedStageTools;
+  if ((stageType as any) === 'markup') tools = markupTools;
   if (calibrationMode) {
     tools = baseTools.filter(t => ['interact', 'line'].includes(t.id));
   }

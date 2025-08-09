@@ -10,6 +10,7 @@ export const getSvgElements = query({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
@@ -24,6 +25,7 @@ export const getSvgElements = query({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
@@ -43,14 +45,13 @@ export const getSvgElements = query({
       fill: v.string(),
       opacity: v.number(),
     }),
+    semanticType: v.optional(v.union(v.literal("room"), v.literal("door"), v.literal("window"))),
     order: v.number(),
   })),
   handler: async (ctx, args) => {
     const elements = await ctx.db
       .query("svgElements")
-      .withIndex("by_page_and_stage", (q) =>
-        q.eq("pageId", args.pageId).eq("stageType", args.stageType)
-      )
+      .withIndex("by_page_and_stage", (q) => q.eq("pageId", args.pageId).eq("stageType", args.stageType as unknown as any))
       .order("asc")
       .collect();
 
@@ -66,6 +67,7 @@ export const createSvgElement = mutation({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
@@ -85,15 +87,14 @@ export const createSvgElement = mutation({
       fill: v.string(),
       opacity: v.number(),
     }),
+    semanticType: v.optional(v.union(v.literal("room"), v.literal("door"), v.literal("window"))),
   },
   returns: v.id("svgElements"),
   handler: async (ctx, args) => {
     // Получаем максимальный порядок для данного этапа
     const existingElements = await ctx.db
       .query("svgElements")
-      .withIndex("by_page_and_stage", (q) =>
-        q.eq("pageId", args.pageId).eq("stageType", args.stageType)
-      )
+      .withIndex("by_page_and_stage", (q) => q.eq("pageId", args.pageId).eq("stageType", args.stageType as any))
       .collect();
 
     const maxOrder = existingElements.length > 0 
@@ -102,10 +103,11 @@ export const createSvgElement = mutation({
 
     const elementId = await ctx.db.insert("svgElements", {
       pageId: args.pageId,
-      stageType: args.stageType,
+      stageType: args.stageType as any,
       elementType: args.elementType,
       data: args.data,
       style: args.style,
+      semanticType: args.semanticType,
       order: maxOrder + 1,
     });
 
@@ -162,6 +164,7 @@ export const clearSvgElements = mutation({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
@@ -207,16 +210,23 @@ export const getStageSummaryByProject = query({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
       v.literal("materials")
     ),
   },
-  returns: v.object({
-    totalAreaPx2: v.number(),
-    totalLengthPx: v.number(),
-  }),
+  returns: v.union(
+    v.object({ totalAreaPx2: v.number(), totalLengthPx: v.number() }),
+    v.object({
+      totalAreaPx2: v.number(),
+      totalLengthPx: v.number(),
+      rooms: v.object({ areaPx2: v.number(), perimeterPx: v.number() }),
+      doors: v.object({ areaPx2: v.number() }),
+      windows: v.object({ areaPx2: v.number() }),
+    })
+  ),
   handler: async (ctx, args) => {
     const pages = await ctx.db
       .query("pages")
@@ -225,13 +235,12 @@ export const getStageSummaryByProject = query({
 
     let totalAreaPx2 = 0;
     let totalLengthPx = 0;
+    let roomsPerimeterPx = 0, roomsAreaPx2 = 0, doorsAreaPx2 = 0, windowsAreaPx2 = 0;
 
     for (const page of pages) {
       const elements = await ctx.db
         .query("svgElements")
-        .withIndex("by_page_and_stage", (q) =>
-          q.eq("pageId", page._id).eq("stageType", args.stageType)
-        )
+        .withIndex("by_page_and_stage", (q) => q.eq("pageId", page._id).eq("stageType", args.stageType as any))
         .collect();
 
       for (const el of elements) {
@@ -247,11 +256,38 @@ export const getStageSummaryByProject = query({
             const h = Math.abs(height);
             totalAreaPx2 += w * h;
             totalLengthPx += Math.max(w, h);
+            if (args.stageType === 'markup') {
+              const area = w * h;
+              if (el.semanticType === 'door') doorsAreaPx2 += area;
+              if (el.semanticType === 'window') windowsAreaPx2 += area;
+            }
+          }
+        }
+        if (args.stageType === 'markup' && el.elementType === 'polygon') {
+          const pts = el.data?.points ?? [];
+          if (Array.isArray(pts) && pts.length >= 3) {
+            let perim = 0; let area2 = 0;
+            for (let i = 0; i < pts.length; i++) {
+              const a = pts[i], b = pts[(i+1)%pts.length];
+              perim += Math.hypot(b.x - a.x, b.y - a.y);
+              area2 += (a.x * b.y - b.x * a.y);
+            }
+            roomsPerimeterPx += perim;
+            roomsAreaPx2 += Math.abs(area2) / 2;
           }
         }
       }
     }
 
+    if (args.stageType === 'markup') {
+      return {
+        totalAreaPx2,
+        totalLengthPx,
+        rooms: { areaPx2: roomsAreaPx2, perimeterPx: roomsPerimeterPx },
+        doors: { areaPx2: doorsAreaPx2 },
+        windows: { areaPx2: windowsAreaPx2 },
+      };
+    }
     return { totalAreaPx2, totalLengthPx };
   },
 });

@@ -4,12 +4,17 @@ import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 
-type StageId = 'measurement' | 'installation' | 'demolition' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
+type StageId = 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
 
-const STAGE_META: Record<StageId, { title: string; description: string; binding: string }> = {
+const STAGE_META: Record<StageId, { title: string; description: string; binding: string; triggers?: Array<{ id: 'room'|'door'|'window'; name: string }> }> = {
   measurement: { title: 'Калибровка', description: 'Шаблон калибровки масштаба', binding: 'Привязка не требуется' },
   demolition: { title: 'Демонтаж', description: 'Материалы, расходуемые при демонтаже', binding: 'Привязка: метр демонтируемой стены' },
   installation: { title: 'Монтаж', description: 'Материалы для монтажных работ', binding: 'Привязка: метр возводимой стены' },
+  markup: { title: 'Разметка', description: 'Комнаты, двери, окна', binding: 'Привязки: Комната (P*H+2S), Дверь (S*H), Окно (S*(2/3*H))', triggers: [
+    { id: 'room', name: 'Комнаты' },
+    { id: 'door', name: 'Двери' },
+    { id: 'window', name: 'Окна' },
+  ]},
   electrical: { title: 'Электрика', description: 'Материалы для электромонтажных работ', binding: 'Привязка: будет уточнено' },
   plumbing: { title: 'Сантехника', description: 'Материалы для сантехнических работ', binding: 'Привязка: будет уточнено' },
   finishing: { title: 'Отделка', description: 'Материалы для отделочных работ', binding: 'Привязка: будет уточнено' },
@@ -20,10 +25,11 @@ export default function MaterialsDefaultsPage() {
   const [stageType, setStageType] = useState<StageId>('demolition');
   const rows = useQuery(api.materials.listDefaults, { stageType });
   const upsert = useMutation(api.materials.upsertDefault);
+  const [triggerTab, setTriggerTab] = useState<'room'|'door'|'window'>('room');
 
   const meta = STAGE_META[stageType];
 
-  const stages: StageId[] = ['measurement','demolition','installation','electrical','plumbing','finishing','materials'];
+  const stages: StageId[] = ['measurement','demolition','installation','markup','electrical','plumbing','finishing','materials'];
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
@@ -63,13 +69,20 @@ export default function MaterialsDefaultsPage() {
             </div>
             <div>
               <button
-                onClick={() => upsert({ stageType, name: 'Новый материал', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0 })}
+                onClick={() => upsert({ stageType, name: 'Новый материал', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, triggerType: meta.triggers ? triggerTab : undefined })}
                 className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
               >
                 + Добавить материал
               </button>
             </div>
           </div>
+          {meta.triggers && (
+            <div className="mt-3 flex items-center gap-2">
+              {meta.triggers.map(t => (
+                <button key={t.id} onClick={() => setTriggerTab(t.id)} className={`px-3 py-1.5 text-xs rounded-md border ${triggerTab===t.id?'bg-blue-50 border-blue-200 text-blue-700':'bg-white border-gray-200 text-gray-700'}`}>{t.name}</button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Таблица */}
@@ -86,22 +99,22 @@ export default function MaterialsDefaultsPage() {
                 </tr>
               </thead>
               <tbody>
-                {(rows ?? []).map((row, idx) => (
+                {(rows ?? []).filter(r => !meta.triggers || (r as any).triggerType === triggerTab).map((row, idx) => (
                   <tr key={row._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="p-2 align-top">
-                      <input defaultValue={row.name} onBlur={e => upsert({ id: row._id, stageType, name: e.target.value, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                      <input defaultValue={row.name} onBlur={e => upsert({ id: row._id, stageType, name: e.target.value, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as any).triggerType })} className="w-full border rounded px-2 py-1" />
                     </td>
                     <td className="p-2 align-top">
-                      <input type="number" step="0.0001" defaultValue={row.consumptionPerUnit} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: parseFloat(e.target.value || '0'), purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                      <input type="number" step="0.0001" defaultValue={row.consumptionPerUnit} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: parseFloat(e.target.value || '0'), purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as any).triggerType })} className="w-full border rounded px-2 py-1" />
                     </td>
                     <td className="p-2 align-top">
-                      <input defaultValue={row.unit || ''} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: e.target.value || undefined })} className="w-full border rounded px-2 py-1" />
+                      <input defaultValue={row.unit || ''} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: e.target.value || undefined, triggerType: (row as any).triggerType })} className="w-full border rounded px-2 py-1" />
                     </td>
                     <td className="p-2 align-top">
-                      <input type="number" step="0.01" defaultValue={row.purchasePrice} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: parseFloat(e.target.value || '0'), sellPrice: row.sellPrice, unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                      <input type="number" step="0.01" defaultValue={row.purchasePrice} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: parseFloat(e.target.value || '0'), sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as any).triggerType })} className="w-full border rounded px-2 py-1" />
                     </td>
                     <td className="p-2 align-top">
-                      <input type="number" step="0.01" defaultValue={row.sellPrice} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: parseFloat(e.target.value || '0'), unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                      <input type="number" step="0.01" defaultValue={row.sellPrice} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: parseFloat(e.target.value || '0'), unit: row.unit, triggerType: (row as any).triggerType })} className="w-full border rounded px-2 py-1" />
                     </td>
                   </tr>
                 ))}

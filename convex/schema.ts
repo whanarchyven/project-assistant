@@ -37,6 +37,7 @@ export default defineSchema({
       v.literal("measurement"), // Обмер
       v.literal("installation"), // Монтаж
       v.literal("demolition"), // Демонтаж
+      v.literal("markup"), // Разметка (комнаты/окна/двери)
       v.literal("electrical"), // Электрика
       v.literal("plumbing"), // Сантехника
       v.literal("finishing"), // Отделка
@@ -70,6 +71,7 @@ export default defineSchema({
       v.literal("measurement"), // Обмер
       v.literal("installation"), // Монтаж
       v.literal("demolition"), // Демонтаж
+      v.literal("markup"), // Разметка
       v.literal("electrical"), // Электрика
       v.literal("plumbing"), // Сантехника
       v.literal("finishing"), // Отделка
@@ -82,6 +84,11 @@ export default defineSchema({
       v.literal("text"),
       v.literal("polygon")
     ),
+    semanticType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window")
+    )),
     data: v.any(), // данные элемента (координаты, размеры и т.д.)
     style: v.object({
       stroke: v.string(),
@@ -99,6 +106,7 @@ export default defineSchema({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
@@ -109,6 +117,11 @@ export default defineSchema({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()), // ед. измерения, опционально
+    triggerType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window")
+    )),
   }).index("by_owner_and_stage", ["ownerUserId", "stageType"]),
 
   // Материалы проекта (копия/переопределение дефолтов)
@@ -118,6 +131,7 @@ export default defineSchema({
       v.literal("measurement"),
       v.literal("installation"),
       v.literal("demolition"),
+      v.literal("markup"),
       v.literal("electrical"),
       v.literal("plumbing"),
       v.literal("finishing"),
@@ -128,5 +142,10 @@ export default defineSchema({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
+    triggerType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window")
+    )),
   }).index("by_project_and_stage", ["projectId", "stageType"]),
 });

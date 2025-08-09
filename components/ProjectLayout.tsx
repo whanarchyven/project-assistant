@@ -57,6 +57,7 @@ export default function ProjectLayout({
     { id: 'measurement', name: 'Калибровка', description: 'Калибровка масштаба по известной длине' },
     { id: 'demolition', name: 'Демонтаж', description: 'Демонтажные работы' },
     { id: 'installation', name: 'Монтаж', description: 'Монтаж стен' },
+    { id: 'markup', name: 'Разметка', description: 'Комнаты, окна и двери' },
   ];
 
   return (

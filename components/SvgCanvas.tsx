@@ -10,6 +10,7 @@ export interface SvgElement {
     fill: string;
     opacity: number;
   };
+  semanticType?: 'room' | 'door' | 'window';
 }
 
 interface SvgCanvasProps {
@@ -19,14 +20,14 @@ interface SvgCanvasProps {
   pan: { x: number; y: number };
   elements: SvgElement[];
   onElementsChange: (elements: SvgElement[]) => void;
-  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon';
+  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window';
   isDrawing: boolean;
   onDrawingStart: () => void;
   onDrawingEnd: () => void;
   onElementSelect?: (elementId: string | null) => void;
   selectedElementId?: string | null;
   calibrationMode?: boolean;
-  stageType?: 'measurement' | 'installation' | 'demolition' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
+  stageType?: 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
 }
 
 export default function SvgCanvas({
@@ -93,7 +94,7 @@ export default function SvgCanvas({
       const hit = findElementAtPoint(point);
       setSelectedElementId(hit ? hit.id : null);
       return;
-    } else if (selectedTool === 'polygon') {
+    } else if (selectedTool === 'polygon' || selectedTool === 'room') {
       // Режим рисования многоугольника
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
@@ -150,21 +151,27 @@ export default function SvgCanvas({
     if (selectedTool === 'select') return;
     // На этапе калибровки разрешаем рисовать только линию
     if (calibrationMode && selectedTool !== 'line') return;
+    // Для многоугольника/комнаты используем отдельный режим добавления точек
+    if (selectedTool === 'polygon' || selectedTool === 'room') return;
     
     const newElement: SvgElement = {
       id: `element_${Date.now()}`,
-      type: selectedTool as 'line' | 'rectangle' | 'circle' | 'text' | 'polygon',
+      type: (selectedTool === 'door' || selectedTool === 'window') ? 'rectangle' : (selectedTool as any),
       data: getInitialData(selectedTool, point),
       style: {
         stroke: (() => {
+          if (selectedTool === 'door') return '#8b5e3c';
+          if (selectedTool === 'window') return '#f59e0b';
           if (selectedTool === 'rectangle') {
-            if (stageType === 'demolition') return '#ef4444'; // красный
-            if (stageType === 'installation') return '#16a34a'; // зелёный
+            if (stageType === 'demolition') return '#ef4444';
+            if (stageType === 'installation') return '#16a34a';
           }
           return '#16a34a';
         })(),
         strokeWidth: 2,
         fill: (() => {
+          if (selectedTool === 'door') return '#8b5e3c';
+          if (selectedTool === 'window') return '#f59e0b';
           if (selectedTool === 'rectangle') {
             if (stageType === 'demolition') return '#ef4444';
             if (stageType === 'installation') return '#16a34a';
@@ -173,6 +180,7 @@ export default function SvgCanvas({
         })(),
         opacity: 1,
       },
+      semanticType: selectedTool === 'door' ? 'door' : selectedTool === 'window' ? 'window' : undefined,
     };
     
     setCurrentElement(newElement);
@@ -204,23 +212,24 @@ export default function SvgCanvas({
 
   const finishPolygon = useCallback(() => {
     if (polygonPoints.length >= 3) {
+      const isRoom = selectedTool === 'room';
       const newElement: SvgElement = {
         id: `element_${Date.now()}`,
         type: 'polygon',
         data: { points: polygonPoints },
         style: {
-          stroke: '#16a34a',
+          stroke: isRoom ? '#16a34a' : '#16a34a',
           strokeWidth: 2,
-          fill: 'transparent',
+          fill: isRoom ? 'rgba(16,185,129,0.25)' : 'transparent',
           opacity: 1,
         },
+        semanticType: isRoom ? 'room' : undefined,
       };
-      
       onElementsChange([...elements, newElement]);
       setPolygonPoints([]);
       onDrawingEnd();
     }
-  }, [polygonPoints, elements, onElementsChange, onDrawingEnd]);
+  }, [polygonPoints, elements, onElementsChange, onDrawingEnd, selectedTool]);
 
   // Вспомогательные функции
   const getInitialData = (type: string, point: { x: number; y: number }) => {
@@ -229,22 +238,29 @@ export default function SvgCanvas({
         return { x1: point.x, y1: point.y, x2: point.x, y2: point.y };
       case 'rectangle':
         return { x: point.x, y: point.y, width: 0, height: 0 };
+      case 'door':
+      case 'window':
+        return { x: point.x, y: point.y, width: 0, height: 0 };
       case 'circle':
         return { cx: point.x, cy: point.y, r: 0 };
       case 'text':
         return { x: point.x, y: point.y, text: 'Текст' };
       case 'polygon':
-        return { points: `${point.x},${point.y}` };
+        return { points: [{ x: point.x, y: point.y }] };
+      case 'room':
+        return { points: [{ x: point.x, y: point.y }] };
       default:
         return {};
     }
   };
 
   const updateElementData = (element: SvgElement, point: { x: number; y: number }) => {
-    switch (element.type) {
+    switch ((element.type as unknown) as 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'door' | 'window' | 'room') {
       case 'line':
         return { ...element.data, x2: point.x, y2: point.y };
       case 'rectangle':
+      case 'door':
+      case 'window':
         return {
           ...element.data,
           width: point.x - element.data.x,
@@ -254,6 +270,9 @@ export default function SvgCanvas({
         const dx = point.x - element.data.cx;
         const dy = point.y - element.data.cy;
         return { ...element.data, r: Math.sqrt(dx * dx + dy * dy) };
+      case 'polygon':
+      case 'room':
+        return element.data;
       default:
         return element.data;
     }
@@ -483,6 +502,12 @@ export default function SvgCanvas({
         e.stopPropagation();
       }}
       onContextMenu={(e) => e.preventDefault()}
+      onDoubleClick={(e) => {
+        if (selectedTool === 'polygon' || selectedTool === 'room') {
+          e.stopPropagation();
+          finishPolygon();
+        }
+      }}
     >
       <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
         {/* Существующие элементы */}
@@ -492,7 +517,7 @@ export default function SvgCanvas({
         {currentElement && renderElement(currentElement)}
 
         {/* Точки многоугольника в процессе рисования */}
-        {selectedTool === 'polygon' && polygonPoints.length > 0 && (
+        {(selectedTool === 'polygon' || selectedTool === 'room') && polygonPoints.length > 0 && (
           <>
             {/* Линии между точками */}
             {polygonPoints.length > 1 && (

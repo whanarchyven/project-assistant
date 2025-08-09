@@ -168,6 +168,7 @@ export default function DrawingCanvas({
         elementType: element.type,
         data: element.data,
         style: element.style,
+        semanticType: (currentStage === 'markup') ? (element.semanticType ?? ((selectedTool === 'room') ? 'room' : (selectedTool === 'door') ? 'door' : (selectedTool === 'window') ? 'window' : undefined)) : undefined,
       });
     }
 

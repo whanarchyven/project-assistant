@@ -6,10 +6,17 @@ const stageUnion = v.union(
   v.literal("measurement"),
   v.literal("installation"),
   v.literal("demolition"),
+  v.literal("markup"),
   v.literal("electrical"),
   v.literal("plumbing"),
   v.literal("finishing"),
   v.literal("materials")
+);
+
+const triggerUnion = v.union(
+  v.literal("room"),
+  v.literal("door"),
+  v.literal("window")
 );
 
 export const listDefaults = query({
@@ -24,6 +31,7 @@ export const listDefaults = query({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
+    triggerType: v.optional(triggerUnion),
   })),
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -43,6 +51,7 @@ export const upsertDefault = mutation({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
+    triggerType: v.optional(triggerUnion),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -56,6 +65,7 @@ export const upsertDefault = mutation({
         purchasePrice: args.purchasePrice,
         sellPrice: args.sellPrice,
         unit: args.unit,
+        triggerType: args.triggerType,
       });
     } else {
       await ctx.db.insert("materialsDefaults", {
@@ -66,6 +76,7 @@ export const upsertDefault = mutation({
         purchasePrice: args.purchasePrice,
         sellPrice: args.sellPrice,
         unit: args.unit,
+        triggerType: args.triggerType,
       });
     }
     return null;
@@ -84,6 +95,7 @@ export const listProjectMaterials = query({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
+    triggerType: v.optional(triggerUnion),
   })),
   handler: async (ctx, args) => {
     let q = ctx.db.query("projectMaterials").withIndex("by_project_and_stage", (q) => q.eq("projectId", args.projectId));
@@ -102,6 +114,7 @@ export const upsertProjectMaterial = mutation({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
+    triggerType: v.optional(triggerUnion),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -113,6 +126,7 @@ export const upsertProjectMaterial = mutation({
         purchasePrice: args.purchasePrice,
         sellPrice: args.sellPrice,
         unit: args.unit,
+        triggerType: args.triggerType,
       });
     } else {
       await ctx.db.insert("projectMaterials", {
@@ -123,6 +137,7 @@ export const upsertProjectMaterial = mutation({
         purchasePrice: args.purchasePrice,
         sellPrice: args.sellPrice,
         unit: args.unit,
+        triggerType: args.triggerType,
       });
     }
     return null;
