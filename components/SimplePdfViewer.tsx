@@ -160,7 +160,6 @@ export default function SimplePdfViewer({
             url={pdfUrl}
             currentPage={currentPage}
             scale={scale}
-            onPageChange={onPageChange}
             onDocumentLoadSuccess={handleDocumentLoadSuccess}
           />
         </div>

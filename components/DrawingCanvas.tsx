@@ -49,7 +49,7 @@ export default function DrawingCanvas({
     api.svgElements.getSvgElements,
     currentPageData ? {
       pageId: currentPageData._id,
-      stageType: currentStage as any,
+      stageType: currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
     } : "skip"
   );
 
@@ -61,7 +61,7 @@ export default function DrawingCanvas({
 
   // Мутации для работы с SVG элементами
   const createElement = useMutation(api.svgElements.createSvgElement);
-  const updateElement = useMutation(api.svgElements.updateSvgElement);
+  // const updateElement = useMutation(api.svgElements.updateSvgElement);
   const deleteElement = useMutation(api.svgElements.deleteSvgElement);
   const clearElements = useMutation(api.svgElements.clearSvgElements);
   const updateCeilingHeight = useMutation(api.projects.updateCeilingHeight);
@@ -164,7 +164,7 @@ export default function DrawingCanvas({
       console.log('Creating element:', element);
       await createElement({
         pageId,
-        stageType: currentStage as any,
+        stageType: currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
         elementType: element.type,
         data: element.data,
         style: element.style,
@@ -174,7 +174,7 @@ export default function DrawingCanvas({
 
     console.log('Setting elements to:', newElements);
     setElements(newElements);
-  }, [currentPageData, currentStage, createElement, elements, isCalibrating, ensurePage, projectId, currentPage]);
+  }, [currentPageData, currentStage, createElement, elements, isCalibrating, ensurePage, projectId, currentPage, selectedTool]);
 
   const handleDrawingStart = useCallback(() => {
     setIsDrawing(true);
@@ -206,7 +206,7 @@ export default function DrawingCanvas({
     try {
       await clearElements({
         pageId,
-        stageType: currentStage as any,
+        stageType: currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
       });
       console.log('Clear elements mutation completed');
     } catch (error) {
@@ -214,7 +214,7 @@ export default function DrawingCanvas({
     }
     setElements([]);
     setSelectedElementId(null);
-  }, [currentPageData, pages, currentStage, clearElements]);
+  }, [currentPageData, pages, currentStage, clearElements, ensurePage, projectId, currentPage]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (selectedElementId && !selectedElementId.startsWith('element_')) {
@@ -343,7 +343,7 @@ export default function DrawingCanvas({
               onElementSelect={setSelectedElementId}
               selectedElementId={selectedElementId}
               calibrationMode={isCalibrating}
-              stageType={currentStage as any}
+              stageType={currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials'}
             />
           </div>
         </div>
@@ -357,7 +357,7 @@ export default function DrawingCanvas({
             onDeleteSelected={handleDeleteSelected}
             hasSelectedElement={!!selectedElementId}
             disabled={false}
-            stageType={currentStage as any}
+            stageType={currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials' | undefined}
             calibrationMode={isCalibrating}
           />
           
@@ -442,23 +442,23 @@ function ElementInfo({ element, projectId }: { element: SvgElement; projectId: I
   const info = useMemo(() => {
     switch (element.type) {
       case 'line': {
-        const { x1, y1, x2, y2 } = element.data || {};
-        if ([x1, y1, x2, y2].some((v: any) => typeof v !== 'number')) return null;
-        const px = Math.hypot(x2 - x1, y2 - y1);
+        const { x1, y1, x2, y2 } = (element.data || {}) as { x1?: number; y1?: number; x2?: number; y2?: number };
+        if ([x1, y1, x2, y2].some((v) => typeof v !== 'number')) return null;
+        const px = Math.hypot((x2 as number) - (x1 as number), (y2 as number) - (y1 as number));
         const mm = mmPerPx ? (px * mmPerPx) : null;
         return { title: `Линия #${element.id.slice(-4)}`, subtitle: mm ? `${mm.toFixed(1)} мм` : `${px.toFixed(1)} px` };
       }
       case 'rectangle': {
-        const { width, height } = element.data || {};
-        if ([width, height].some((v: any) => typeof v !== 'number')) return null;
-        const w = Math.abs(width);
-        const h = Math.abs(height);
-        const wStr = mmPerPx ? `${(w * mmPerPx).toFixed(1)} мм` : `${w.toFixed(1)} px`;
-        const hStr = mmPerPx ? `${(h * mmPerPx).toFixed(1)} мм` : `${h.toFixed(1)} px`;
+        const { width, height } = (element.data || {}) as { width?: number; height?: number };
+        if ([width, height].some((v) => typeof v !== 'number')) return null;
+        const w = Math.abs(width as number);
+        const h = Math.abs(height as number);
+        const wStr = mmPerPx ? `${(w * (mmPerPx as number)).toFixed(1)} мм` : `${w.toFixed(1)} px`;
+        const hStr = mmPerPx ? `${(h * (mmPerPx as number)).toFixed(1)} мм` : `${h.toFixed(1)} px`;
         return { title: `Прямоугольник #${element.id.slice(-4)}`, subtitle: `${wStr} × ${hStr}` };
       }
       case 'circle': {
-        const { r } = element.data || {};
+        const { r } = (element.data || {}) as { r?: number };
         if (typeof r !== 'number') return null;
         const d = r * 2;
         const dStr = mmPerPx ? `${(d * mmPerPx).toFixed(1)} мм` : `${d.toFixed(1)} px`;

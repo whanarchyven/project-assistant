@@ -8,7 +8,8 @@ interface PdfDocumentProps {
   url: string;
   currentPage: number;
   scale: number;
-  onPageChange: (page: number) => void;
+  // kept for potential future use
+  // onPageChange?: (page: number) => void;
   onDocumentLoadSuccess?: (numPages: number) => void;
 }
 
@@ -16,7 +17,6 @@ export default function PdfDocument({
   url,
   currentPage,
   scale,
-  onPageChange,
   onDocumentLoadSuccess,
 }: PdfDocumentProps) {
   const [numPages, setNumPages] = useState<number>(0);

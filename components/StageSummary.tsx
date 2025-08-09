@@ -10,9 +10,9 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
   const heightRaw = project?.ceilingHeight ?? null;
   const H = heightRaw != null ? (heightRaw >= 100 ? heightRaw / 1000 : heightRaw) : null;
   const mmPerPx = useMmPerPx(projectId);
-  const summary = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'markup' as any });
-  const projectMaterialsRooms = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'markup' as any });
-  const defaultsRooms = useQuery(api.materials.listDefaults, { stageType: 'markup' as any });
+  const summary = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'markup' });
+  const projectMaterialsRooms = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'markup' });
+  const defaultsRooms = useQuery(api.materials.listDefaults, { stageType: 'markup' });
 
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
@@ -47,9 +47,11 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
     if (!triggers) return undefined;
     const src = (projectMaterialsRooms && projectMaterialsRooms.length > 0) ? projectMaterialsRooms : (defaultsRooms ?? []);
     if (src.length === 0) return undefined;
-    const group = { rooms: [] as any[], doors: [] as any[], windows: [] as any[] };
-    for (const row of src as any[]) {
-      const t = row.triggerType as 'room'|'door'|'window'|undefined;
+    type Mat = { triggerType?: 'room'|'door'|'window'; consumptionPerUnit: number; purchasePrice: number; sellPrice: number; name: string; unit?: string; _id?: string };
+    type MatRow = Mat & { qty: number; cost: number; revenue: number; profit: number };
+    const group: { rooms: Array<MatRow>; doors: Array<MatRow>; windows: Array<MatRow> } = { rooms: [], doors: [], windows: [] };
+    for (const row of src as Array<Mat>) {
+      const t = row.triggerType;
       if (!t) continue;
       const trigVal = t === 'room' ? triggers.rooms : t === 'door' ? triggers.doors : triggers.windows;
       const qty = row.consumptionPerUnit * trigVal;
@@ -58,7 +60,7 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
       const profit = revenue - cost;
       group[t === 'room' ? 'rooms' : t === 'door' ? 'doors' : 'windows'].push({ ...row, qty, cost, revenue, profit });
     }
-    const sum = (list: any[]) => list.reduce((a, x) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+    const sum = (list: Array<MatRow>) => list.reduce((a, x) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
     return {
       rooms: { list: group.rooms, totals: sum(group.rooms) },
       doors: { list: group.doors, totals: sum(group.doors) },
@@ -160,7 +162,7 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {materials[key].list.map((m: any, idx: number) => (
+                        {materials[key].list.map((m: { _id?: string; name: string; unit?: string; consumptionPerUnit: number; qty: number; cost: number; revenue: number; profit: number }, idx: number) => (
                           <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             <td className="p-1">{m.name}</td>
                             <td className="p-1">{nf.format(m.consumptionPerUnit)}</td>
@@ -276,7 +278,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
     if (!heightM || heightM <= 0) return undefined;
     const source = (projectMaterials && projectMaterials.length > 0) ? projectMaterials : (defaultMaterials ?? []);
     if (source.length === 0) return undefined;
-    const list = source.map((row: any) => {
+    const list = source.map((row: { _id: string; name: string; unit?: string; consumptionPerUnit: number; purchasePrice: number; sellPrice: number }) => {
       const qty = row.consumptionPerUnit * totals.totalLengthM * heightM; // расход на 1 м × длина (м) × высота (м)
       const cost = qty * row.purchasePrice; // закупка
       const revenue = qty * row.sellPrice;  // реализация
@@ -287,7 +289,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
       acc.qty += x.qty; acc.cost += x.cost; acc.revenue += x.revenue; acc.profit += x.profit; return acc;
     }, { qty: 0, cost: 0, revenue: 0, profit: 0 });
     return { list, totalsRow };
-  }, [projectMaterials, totals]);
+  }, [projectMaterials, defaultMaterials, totals]);
 
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -417,7 +419,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
     if (!heightM || heightM <= 0) return undefined;
     const source = (projectMaterials && projectMaterials.length > 0) ? projectMaterials : (defaultMaterials ?? []);
     if (source.length === 0) return undefined;
-    const list = source.map((row: any) => {
+    const list = source.map((row: { _id: string; name: string; unit?: string; consumptionPerUnit: number; purchasePrice: number; sellPrice: number }) => {
       const qty = row.consumptionPerUnit * totals.totalLengthM * heightM;
       const cost = qty * row.purchasePrice;
       const revenue = qty * row.sellPrice;

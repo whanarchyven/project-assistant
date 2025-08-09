@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
@@ -14,7 +14,7 @@ export default function MaterialsPageClient({ projectId }: { projectId: Id<'proj
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Материалы проекта</h2>
-        <select value={stageType} onChange={(e) => setStageType(e.target.value as any)} className="border border-gray-300 rounded-md px-2 py-1 text-sm">
+        <select value={stageType} onChange={(e) => setStageType(e.target.value as typeof stageType)} className="border border-gray-300 rounded-md px-2 py-1 text-sm">
           <option value="demolition">Демонтаж</option>
           <option value="installation">Монтаж</option>
           <option value="measurement">Калибровка</option>

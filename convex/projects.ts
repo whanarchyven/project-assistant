@@ -633,6 +633,7 @@ export const copyDefaultMaterialsToProject = internalMutation({
         purchasePrice: row.purchasePrice,
         sellPrice: row.sellPrice,
         unit: row.unit,
+        triggerType: (row as any).triggerType,
       });
     }
     return null;

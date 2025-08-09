@@ -3,13 +3,13 @@
 import React from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { useRouter } from 'next/navigation';
+// import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function ProjectsPage() {
   const projects = useQuery(api.projects.getUserProjects);
   const deleteProject = useMutation(api.projects.deleteProject);
-  const router = useRouter();
+  // const router = useRouter();
 
   if (projects === undefined) {
     return (

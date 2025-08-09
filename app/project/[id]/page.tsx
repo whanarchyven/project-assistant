@@ -3,14 +3,8 @@ import { Id } from '../../../convex/_generated/dataModel';
 import ProjectPageClient from './ProjectPageClient';
 
 
-interface ProjectPageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default async function ProjectPage({ params }: ProjectPageProps) {
-  const projectId = (await params).id as Id<"projects">;
-  
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const projectId = id as Id<"projects">;
   return <ProjectPageClient projectId={projectId} />;
-} 
+}

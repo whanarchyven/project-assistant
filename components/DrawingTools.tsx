@@ -9,7 +9,7 @@ interface DrawingToolsProps {
   onDeleteSelected: () => void;
   hasSelectedElement: boolean;
   disabled?: boolean;
-  stageType?: 'measurement' | 'installation' | 'demolition' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
+  stageType?: 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
   calibrationMode?: boolean;
 }
 
@@ -90,11 +90,11 @@ export default function DrawingTools({
     },
   ];
 
-  const restrictedStageTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','rectangle'].includes(t.id)) as any;
-  const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','window','door'].includes(t.id)) as any;
+  const restrictedStageTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','rectangle'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','window','door'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   let tools = baseTools;
   if (stageType === 'demolition' || stageType === 'installation') tools = restrictedStageTools;
-  if ((stageType as any) === 'markup') tools = markupTools;
+  if ((stageType as unknown) === 'markup') tools = markupTools;
   if (calibrationMode) {
     tools = baseTools.filter(t => ['interact', 'line'].includes(t.id));
   }

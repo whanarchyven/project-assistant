@@ -27,7 +27,7 @@ export default function PdfViewer({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [isLoading, setIsLoading] = useState(true);
+  // const [isLoading, setIsLoading] = useState(true);
   const [numPages, setNumPages] = useState(0);
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -273,7 +273,6 @@ export default function PdfViewer({
               url={pdfUrl}
               currentPage={currentPage}
               scale={scale}
-              onPageChange={onPageChange}
               onDocumentLoadSuccess={handleDocumentLoadSuccess}
             />
           )}

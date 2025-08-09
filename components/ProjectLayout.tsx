@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import { Id } from '../convex/_generated/dataModel';
 import StageSummary from './StageSummary';
 import { useConvexAuth } from 'convex/react';
-import { useAuthActions } from '@convex-dev/auth/react';
+// import { useAuthActions } from '@convex-dev/auth/react';
 import { useRouter } from 'next/navigation';
 
 interface ProjectLayoutProps {
@@ -18,14 +18,14 @@ interface ProjectLayoutProps {
 export default function ProjectLayout({ 
   children, 
   projectId, 
-  currentPage = 1, 
   currentStage = 'measurement',
   onStageChange,
 }: ProjectLayoutProps) {
   const { isAuthenticated } = useConvexAuth();
-  const { signOut } = useAuthActions();
+  // const { signOut } = useAuthActions();
   const router = useRouter();
-  const project = projectId ? useQuery(api.projects.getProject, { projectId: projectId as Id<'projects'> }) : null;
+  // Вызов хука всегда на одном уровне; если projectId нет, запрос просто не выполнится
+  const project = useQuery(api.projects.getProject, { projectId: (projectId as Id<'projects'>) || ('' as unknown as Id<'projects'>) });
 
 
   if (!isAuthenticated) {
@@ -108,7 +108,7 @@ export default function ProjectLayout({
             ))}
           </div>
           {projectId && (
-            <StageSummary projectId={projectId as Id<'projects'>} currentStage={currentStage as any} />
+            <StageSummary projectId={projectId as Id<'projects'>} currentStage={currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
           )}
         </div>
       </div>
