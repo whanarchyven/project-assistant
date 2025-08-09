@@ -38,7 +38,51 @@ export const createProject = mutation({
       pdfFileId: args.pdfFileId,
     });
 
+    // Скопировать дефолтные материалы пользователя в материалы проекта
+    await ctx.scheduler.runAfter(0, internal.projects.copyDefaultMaterialsToProject, {
+      projectId,
+    });
+
     return projectId;
+  },
+});
+
+// Удаление проекта вместе со страницами и элементами
+export const deleteProject = mutation({
+  args: { projectId: v.id("projects") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Не авторизован");
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== userId) throw new Error("Проект не найден");
+
+    const pages = await ctx.db
+      .query("pages")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    for (const page of pages) {
+      const elements = await ctx.db
+        .query("svgElements")
+        .withIndex("by_page_and_stage", (q) => q.eq("pageId", page._id))
+        .collect();
+      for (const el of elements) {
+        await ctx.db.delete(el._id);
+      }
+      await ctx.db.delete(page._id);
+    }
+
+    // Материалы проекта
+    const materials = await ctx.db
+      .query("projectMaterials")
+      .withIndex("by_project_and_stage", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    for (const m of materials) {
+      await ctx.db.delete(m._id);
+    }
+
+    await ctx.db.delete(args.projectId);
+    return null;
   },
 });
 
@@ -259,6 +303,41 @@ export const getProjectPages = query({
       .collect();
 
     return pages;
+  },
+});
+
+// Гарантированно получить страницу проекта по номеру (создать при отсутствии)
+export const ensurePage = mutation({
+  args: {
+    projectId: v.id("projects"),
+    pageNumber: v.number(),
+  },
+  returns: v.id("pages"),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Не авторизован");
+    }
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== userId) {
+      throw new Error("Проект не найден");
+    }
+
+    const existing = await ctx.db
+      .query("pages")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .filter((q) => q.eq(q.field("pageNumber"), args.pageNumber))
+      .unique();
+
+    if (existing) return existing._id;
+
+    const pageId = await ctx.db.insert("pages", {
+      projectId: args.projectId,
+      pageNumber: args.pageNumber,
+      pdfFileId: project.pdfFileId,
+    });
+    return pageId;
   },
 });
 
@@ -525,6 +604,36 @@ export const createPage = internalMutation({
       pageNumber: args.pageNumber,
       pdfFileId: args.pdfFileId,
     });
+  },
+});
+
+// Копирование дефолтных материалов пользователя в проект
+export const copyDefaultMaterialsToProject = internalMutation({
+  args: {
+    projectId: v.id("projects"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) return null;
+
+    const defaults = await ctx.db
+      .query("materialsDefaults")
+      .withIndex("by_owner_and_stage", (q) => q.eq("ownerUserId", project.userId))
+      .collect();
+
+    for (const row of defaults) {
+      await ctx.db.insert("projectMaterials", {
+        projectId: args.projectId,
+        stageType: row.stageType,
+        name: row.name,
+        consumptionPerUnit: row.consumptionPerUnit,
+        purchasePrice: row.purchasePrice,
+        sellPrice: row.sellPrice,
+        unit: row.unit,
+      });
+    }
+    return null;
   },
 });
 

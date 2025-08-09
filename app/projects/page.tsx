@@ -1,13 +1,14 @@
 "use client";
 
 import React from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function ProjectsPage() {
   const projects = useQuery(api.projects.getUserProjects);
+  const deleteProject = useMutation(api.projects.deleteProject);
   const router = useRouter();
 
   if (projects === undefined) {
@@ -124,10 +125,9 @@ export default function ProjectsPage() {
                       Открыть проект
                     </Link>
                     <button
-                      onClick={() => {
-                        // TODO: Добавить удаление проекта
-                        if (confirm('Вы уверены, что хотите удалить этот проект?')) {
-                          console.log('Удаление проекта:', project._id);
+                      onClick={async () => {
+                        if (confirm('Удалить проект безвозвратно?')) {
+                          await deleteProject({ projectId: project._id });
                         }
                       }}
                       className="text-sm font-medium text-red-600 hover:text-red-500"

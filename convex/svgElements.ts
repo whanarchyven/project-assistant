@@ -198,3 +198,60 @@ export const reorderSvgElements = mutation({
     return null;
   },
 }); 
+
+// Сводка по прямоугольникам этапа для всего проекта (в пикселях)
+export const getStageSummaryByProject = query({
+  args: {
+    projectId: v.id("projects"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials")
+    ),
+  },
+  returns: v.object({
+    totalAreaPx2: v.number(),
+    totalLengthPx: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const pages = await ctx.db
+      .query("pages")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    let totalAreaPx2 = 0;
+    let totalLengthPx = 0;
+
+    for (const page of pages) {
+      const elements = await ctx.db
+        .query("svgElements")
+        .withIndex("by_page_and_stage", (q) =>
+          q.eq("pageId", page._id).eq("stageType", args.stageType)
+        )
+        .collect();
+
+      for (const el of elements) {
+        if (el.elementType === "rectangle") {
+          const { width, height } = el.data ?? {};
+          if (
+            typeof width === "number" &&
+            typeof height === "number" &&
+            !Number.isNaN(width) &&
+            !Number.isNaN(height)
+          ) {
+            const w = Math.abs(width);
+            const h = Math.abs(height);
+            totalAreaPx2 += w * h;
+            totalLengthPx += Math.max(w, h);
+          }
+        }
+      }
+    }
+
+    return { totalAreaPx2, totalLengthPx };
+  },
+});

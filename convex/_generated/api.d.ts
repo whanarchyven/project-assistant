@@ -15,6 +15,7 @@ import type {
 } from "convex/server";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
+import type * as materials from "../materials.js";
 import type * as myFunctions from "../myFunctions.js";
 import type * as projects from "../projects.js";
 import type * as svgElements from "../svgElements.js";
@@ -30,6 +31,7 @@ import type * as svgElements from "../svgElements.js";
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
+  materials: typeof materials;
   myFunctions: typeof myFunctions;
   projects: typeof projects;
   svgElements: typeof svgElements;

@@ -1,24 +1,32 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '../convex/_generated/api';
+import { Id } from '../convex/_generated/dataModel';
+import StageSummary from './StageSummary';
 import { useConvexAuth } from 'convex/react';
 import { useAuthActions } from '@convex-dev/auth/react';
 import { useRouter } from 'next/navigation';
 
 interface ProjectLayoutProps {
   children: React.ReactNode;
-  projectId?: string;
+  projectId?: Id<'projects'> | string;
   currentPage?: number;
   currentStage?: string;
+  onStageChange?: (stage: string) => void;
 }
 
 export default function ProjectLayout({ 
   children, 
   projectId, 
   currentPage = 1, 
-  currentStage = 'measurement' 
+  currentStage = 'measurement',
+  onStageChange,
 }: ProjectLayoutProps) {
   const { isAuthenticated } = useConvexAuth();
   const { signOut } = useAuthActions();
   const router = useRouter();
+  const project = projectId ? useQuery(api.projects.getProject, { projectId: projectId as Id<'projects'> }) : null;
+
 
   if (!isAuthenticated) {
     return (
@@ -46,17 +54,13 @@ export default function ProjectLayout({
   }
 
   const stages = [
-    { id: 'measurement', name: 'Обмер', description: 'Измерение стен и площадей' },
-    { id: 'installation', name: 'Монтаж', description: 'Монтажные работы' },
+    { id: 'measurement', name: 'Калибровка', description: 'Калибровка масштаба по известной длине' },
     { id: 'demolition', name: 'Демонтаж', description: 'Демонтажные работы' },
-    { id: 'electrical', name: 'Электрика', description: 'Электромонтажные работы' },
-    { id: 'plumbing', name: 'Сантехника', description: 'Сантехнические работы' },
-    { id: 'finishing', name: 'Отделка', description: 'Отделочные работы' },
-    { id: 'materials', name: 'Материалы', description: 'Расчет материалов' },
+    { id: 'installation', name: 'Монтаж', description: 'Монтаж стен' },
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
+    <div className="min-h-screen flex flex-col bg-gray-100">
       {/* Верхняя панель навигации */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="flex items-center justify-between px-6 py-3">
@@ -95,16 +99,21 @@ export default function ProjectLayout({
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
                 title={stage.description}
+                onClick={() => onStageChange && onStageChange(stage.id)}
+                disabled={stage.id !== 'measurement' && !(project && project.scale)}
               >
                 {stage.name}
               </button>
             ))}
           </div>
+          {projectId && (
+            <StageSummary projectId={projectId as Id<'projects'>} currentStage={currentStage as any} />
+          )}
         </div>
       </div>
 
-      {/* Основной контент */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Основной контент (прокручиваемый) */}
+      <div className="flex-1 flex overflow-visible">
         {/* Левая панель - PDF просмотрщик */}
         <div className="flex-1 flex flex-col">
           {children}

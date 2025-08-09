@@ -91,4 +91,42 @@ export default defineSchema({
     }),
     order: v.number(), // порядок отображения элементов
   }).index("by_page_and_stage", ["pageId", "stageType"]),
+
+  // Дефолтные материалы пользователя/команды
+  materialsDefaults: defineTable({
+    ownerUserId: v.id("users"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials")
+    ),
+    name: v.string(),
+    consumptionPerUnit: v.number(), // расход на единицу триггера этапа (например, м стены)
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()), // ед. измерения, опционально
+  }).index("by_owner_and_stage", ["ownerUserId", "stageType"]),
+
+  // Материалы проекта (копия/переопределение дефолтов)
+  projectMaterials: defineTable({
+    projectId: v.id("projects"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials")
+    ),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+  }).index("by_project_and_stage", ["projectId", "stageType"]),
 });

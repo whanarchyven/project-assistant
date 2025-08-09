@@ -5,6 +5,7 @@ import { Id } from '../convex/_generated/dataModel';
 import SimplePdfViewer from './SimplePdfViewer';
 import SvgCanvas, { SvgElement } from './SvgCanvas';
 import DrawingTools, { DrawingTool } from './DrawingTools';
+import { useMemo } from 'react';
 
 interface DrawingCanvasProps {
   projectId: Id<"projects">;
@@ -27,12 +28,16 @@ export default function DrawingCanvas({
   const [isDrawing, setIsDrawing] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationPixels, setCalibrationPixels] = useState<number | null>(null);
+  const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Получаем страницу проекта
   const pages = useQuery(api.projects.getProjectPages, { projectId });
   const currentPageData = pages?.find(page => page.pageNumber === currentPage);
+  const ensurePage = useMutation(api.projects.ensurePage);
   
   console.log('pages:', pages);
   console.log('pages content:', pages?.[0]);
@@ -48,11 +53,18 @@ export default function DrawingCanvas({
     } : "skip"
   );
 
+  // Загружаем проект, чтобы узнать, есть ли уже калибровка
+  const project = useQuery(api.projects.getProject, { projectId });
+
+  // Мутация для сохранения калибровки
+  const updateProjectScale = useMutation(api.projects.updateProjectScale);
+
   // Мутации для работы с SVG элементами
   const createElement = useMutation(api.svgElements.createSvgElement);
   const updateElement = useMutation(api.svgElements.updateSvgElement);
   const deleteElement = useMutation(api.svgElements.deleteSvgElement);
   const clearElements = useMutation(api.svgElements.clearSvgElements);
+  const updateCeilingHeight = useMutation(api.projects.updateCeilingHeight);
 
   // Отслеживание размера контейнера
   useEffect(() => {
@@ -81,6 +93,14 @@ export default function DrawingCanvas({
     setNumPages(pages);
   }, []);
 
+  // Если нет калибровки, запускаем режим калибровки (блокируем инструменты)
+  useEffect(() => {
+    if (project && !project.scale) {
+      setIsCalibrating(true);
+      setSelectedTool('line');
+    }
+  }, [project]);
+
   // Синхронизация элементов из базы данных
   useEffect(() => {
     if (dbElements) {
@@ -101,16 +121,10 @@ export default function DrawingCanvas({
     console.log('handleElementsChange called with:', newElements.length, 'elements');
     console.log('currentPageData:', currentPageData);
     
-    // Временно используем первую страницу, если currentPageData не найден
-    let targetPageData = currentPageData;
-    if (!targetPageData && pages && pages.length > 0) {
-      targetPageData = pages[0];
-      console.log('Using first page as fallback:', targetPageData);
-    }
-    
-    if (!targetPageData) {
-      console.log('No page data available, returning');
-      return;
+    let pageId = currentPageData?._id;
+    if (!pageId) {
+      // Если страницы нет (например, из-за ленивой инициализации), гарантированно создадим
+      pageId = await ensurePage({ projectId, pageNumber: currentPage });
     }
 
     console.log('Current elements:', elements.length);
@@ -118,13 +132,38 @@ export default function DrawingCanvas({
 
     // Находим новые элементы (которые начинаются с 'element_')
     const newElementsToCreate = newElements.filter(el => el.id.startsWith('element_'));
+
+    // Если идет калибровка, перехватываем и разрешаем только ОДНУ линию
+    if (isCalibrating) {
+      // запретить любые не-линии
+      if (newElementsToCreate.some(el => el.type !== 'line')) {
+        const cleaned = newElements.filter(el => !el.id.startsWith('element_'));
+        setElements(cleaned);
+        return;
+      }
+      if (newElementsToCreate.length > 0) {
+        const lastTemp = newElementsToCreate[newElementsToCreate.length - 1];
+        const { x1, y1, x2, y2 } = lastTemp.data || {};
+        if (typeof x1 === 'number' && typeof y1 === 'number' && typeof x2 === 'number' && typeof y2 === 'number') {
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const px = Math.sqrt(dx * dx + dy * dy);
+          setCalibrationPixels(px);
+          setCalibrationModalOpen(true);
+        }
+        // очищаем несохранённые элементы (калибровочная линия не сохраняется)
+        const cleaned = newElements.filter(el => !el.id.startsWith('element_'));
+        setElements(cleaned);
+        return;
+      }
+    }
     console.log('Elements to create:', newElementsToCreate.length);
     
     // Создаем новые элементы в базе данных
     for (const element of newElementsToCreate) {
       console.log('Creating element:', element);
       await createElement({
-        pageId: targetPageData._id,
+        pageId,
         stageType: currentStage as any,
         elementType: element.type,
         data: element.data,
@@ -134,7 +173,7 @@ export default function DrawingCanvas({
 
     console.log('Setting elements to:', newElements);
     setElements(newElements);
-  }, [currentPageData, currentStage, createElement, elements]);
+  }, [currentPageData, currentStage, createElement, elements, isCalibrating, ensurePage, projectId, currentPage]);
 
   const handleDrawingStart = useCallback(() => {
     setIsDrawing(true);
@@ -158,24 +197,14 @@ export default function DrawingCanvas({
     console.log('pages:', pages);
     console.log('currentStage:', currentStage);
     
-    // Временно используем первую страницу, если currentPageData не найден
-    let targetPageData = currentPageData;
-    if (!targetPageData && pages && pages.length > 0) {
-      targetPageData = pages[0];
-      console.log('Using first page as fallback for clear:', targetPageData);
+    let pageId = currentPageData?._id;
+    if (!pageId) {
+      pageId = await ensurePage({ projectId, pageNumber: currentPage });
     }
-    
-    if (!targetPageData) {
-      console.log('No page data available for clear, just clearing local state');
-      setElements([]);
-      setSelectedElementId(null);
-      return;
-    }
-    
-    console.log('Clearing elements for page:', targetPageData._id);
+    console.log('Clearing elements for page:', pageId);
     try {
       await clearElements({
-        pageId: targetPageData._id,
+        pageId,
         stageType: currentStage as any,
       });
       console.log('Clear elements mutation completed');
@@ -198,6 +227,19 @@ export default function DrawingCanvas({
     }
   }, [selectedElementId, deleteElement]);
 
+  // Подтверждение калибровки
+  const handleSubmitCalibration = useCallback(async (millimeters: number) => {
+    if (!calibrationPixels) return;
+    await updateProjectScale({
+      projectId,
+      knownLength: millimeters,
+      pixelLength: calibrationPixels,
+    });
+    setIsCalibrating(false);
+    setCalibrationModalOpen(false);
+    setCalibrationPixels(null);
+  }, [calibrationPixels, updateProjectScale, projectId]);
+
   // Обработка клавиатуры
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -213,26 +255,7 @@ export default function DrawingCanvas({
   return (
     <div className="flex-1 flex flex-col bg-gray-100 h-full">
       {/* Верхняя панель с информацией */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-gray-600">
-            Страница {currentPage} из {numPages}
-          </span>
-          <span className="text-sm text-gray-600">
-            Масштаб: {Math.round(scale * 100)}%
-          </span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600">
-            Элементов: {elements.length}
-          </span>
-          {selectedElementId && (
-            <span className="text-sm text-blue-600">
-              Выбран элемент
-            </span>
-          )}
-        </div>
-      </div>
+      
 
       {/* Переключатель страниц - над всеми слоями */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
@@ -297,9 +320,9 @@ export default function DrawingCanvas({
           <div 
             className="absolute inset-0"
             style={{ 
-              pointerEvents: selectedTool === 'select' ? 'none' : 'auto',
-              zIndex: selectedTool === 'select' ? -1 : 10,
-              opacity: selectedTool === 'select' ? 0 : 1,
+              pointerEvents: selectedTool === 'interact' ? 'none' : 'auto',
+              zIndex: selectedTool === 'interact' ? -1 : 10,
+              opacity: selectedTool === 'interact' ? 0 : 1,
               transition: 'opacity 0.2s ease-in-out',
               background: 'none',
               backgroundColor: 'transparent',
@@ -318,55 +341,35 @@ export default function DrawingCanvas({
               onDrawingEnd={handleDrawingEnd}
               onElementSelect={setSelectedElementId}
               selectedElementId={selectedElementId}
+              calibrationMode={isCalibrating}
+              stageType={currentStage as any}
             />
           </div>
         </div>
 
         {/* Правая панель - инструменты */}
-        <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-y-auto">
           <DrawingTools
             selectedTool={selectedTool}
             onToolSelect={handleToolSelect}
             onClearAll={handleClearAll}
             onDeleteSelected={handleDeleteSelected}
             hasSelectedElement={!!selectedElementId}
+            disabled={false}
+            stageType={currentStage as any}
+            calibrationMode={isCalibrating}
           />
           
           {/* Дополнительные настройки */}
-          <div className="flex-1 p-4 overflow-y-auto">
+          <div className="flex-1 p-4">
             <div className="space-y-4">
-              {/* Настройки масштаба */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-2">Настройки масштаба</h4>
-                <div className="space-y-2">
-                  <label className="block text-sm text-gray-700">
-                    Известная длина (м)
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="0.00"
-                    />
-                  </label>
-                  <label className="block text-sm text-gray-700">
-                    Длина в пикселях
-                    <input
-                      type="number"
-                      step="1"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="0"
-                    />
-                  </label>
-                  <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
-                    Применить масштаб
-                  </button>
-                </div>
-              </div>
+              {/* Длина потолков */}
+              <CeilingHeightCard projectId={projectId} />
 
               {/* Список элементов */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-2">Элементы чертежа</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
+                <div className="space-y-2">
                   {elements.length === 0 ? (
                     <p className="text-sm text-gray-500">Нет элементов</p>
                   ) : (
@@ -380,12 +383,7 @@ export default function DrawingCanvas({
                         }`}
                         onClick={() => setSelectedElementId(element.id)}
                       >
-                        <div className="flex items-center space-x-2">
-                          <div className="w-3 h-3 rounded-full bg-gray-400"></div>
-                          <span className="text-sm text-gray-700">
-                            {element.type} #{element.id.slice(-4)}
-                          </span>
-                        </div>
+                        <ElementInfo element={element} projectId={projectId} />
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -409,6 +407,164 @@ export default function DrawingCanvas({
           </div>
         </div>
       </div>
+      {/* Модальное окно калибровки */}
+      {calibrationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Калибровка масштаба</h3>
+            <p className="text-sm text-gray-600 mb-4">Введите реальную длину построенного отрезка (в миллиметрах) и высоту потолка (в миллиметрах):</p>
+            <CalibrationForm
+              onCancel={() => { setCalibrationModalOpen(false); /* остаёмся в калибровке */ }}
+              onSubmit={async (mm: number, ceilingMm: number) => {
+                await handleSubmitCalibration(mm);
+                const num = Number(ceilingMm);
+                if (!isNaN(num) && num > 0) {
+                  await updateCeilingHeight({ projectId, ceilingHeight: num });
+                }
+              }}
+              pixels={calibrationPixels ?? 0}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
+
+function useProjectScale(projectId: Id<'projects'>) {
+  const project = useQuery(api.projects.getProject, { projectId });
+  return project?.scale ? (project.scale.knownLength / project.scale.pixelLength) : null; // мм/px
+}
+
+function ElementInfo({ element, projectId }: { element: SvgElement; projectId: Id<'projects'> }) {
+  const mmPerPx = useProjectScale(projectId);
+  const info = useMemo(() => {
+    switch (element.type) {
+      case 'line': {
+        const { x1, y1, x2, y2 } = element.data || {};
+        if ([x1, y1, x2, y2].some((v: any) => typeof v !== 'number')) return null;
+        const px = Math.hypot(x2 - x1, y2 - y1);
+        const mm = mmPerPx ? (px * mmPerPx) : null;
+        return { title: `Линия #${element.id.slice(-4)}`, subtitle: mm ? `${mm.toFixed(1)} мм` : `${px.toFixed(1)} px` };
+      }
+      case 'rectangle': {
+        const { width, height } = element.data || {};
+        if ([width, height].some((v: any) => typeof v !== 'number')) return null;
+        const w = Math.abs(width);
+        const h = Math.abs(height);
+        const wStr = mmPerPx ? `${(w * mmPerPx).toFixed(1)} мм` : `${w.toFixed(1)} px`;
+        const hStr = mmPerPx ? `${(h * mmPerPx).toFixed(1)} мм` : `${h.toFixed(1)} px`;
+        return { title: `Прямоугольник #${element.id.slice(-4)}`, subtitle: `${wStr} × ${hStr}` };
+      }
+      case 'circle': {
+        const { r } = element.data || {};
+        if (typeof r !== 'number') return null;
+        const d = r * 2;
+        const dStr = mmPerPx ? `${(d * mmPerPx).toFixed(1)} мм` : `${d.toFixed(1)} px`;
+        return { title: `Окружность #${element.id.slice(-4)}`, subtitle: `Диаметр: ${dStr}` };
+      }
+      case 'polygon':
+        return { title: `Многоугольник #${element.id.slice(-4)}`, subtitle: '' };
+      case 'text':
+        return { title: `Текст #${element.id.slice(-4)}`, subtitle: '' };
+      default:
+        return null;
+    }
+  }, [element, mmPerPx]);
+
+  return (
+    <div className="flex items-center space-x-2">
+      <div className="w-3 h-3 rounded-full bg-green-600"></div>
+      <div className="flex flex-col">
+        <span className="text-sm text-gray-700">{info?.title ?? `${element.type} #${element.id.slice(-4)}`}</span>
+        {info?.subtitle ? (
+          <span className="text-xs text-gray-500">{info.subtitle}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CeilingHeightCard({ projectId }: { projectId: Id<'projects'> }) {
+  const project = useQuery(api.projects.getProject, { projectId });
+  const updateCeilingHeight = useMutation(api.projects.updateCeilingHeight);
+  const [value, setValue] = React.useState<string>(project?.ceilingHeight ? String(project.ceilingHeight) : '');
+
+  useEffect(() => {
+    setValue(project?.ceilingHeight ? String(project.ceilingHeight) : '');
+  }, [project?.ceilingHeight]);
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-4">
+      <h4 className="font-medium text-gray-900 mb-2">Длина потолков</h4>
+      <div className="space-y-2">
+        <label className="block text-sm text-gray-700">
+          Высота потолка (мм)
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            placeholder="2700"
+          />
+        </label>
+        <button
+          onClick={async () => {
+            const num = parseFloat(value);
+            if (!isNaN(num) && num >= 0) {
+              await updateCeilingHeight({ projectId, ceilingHeight: num });
+            }
+          }}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Сохранить
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CalibrationForm({ onCancel, onSubmit, pixels }: { onCancel: () => void; onSubmit: (mm: number, ceilingMm: number) => void; pixels: number }) {
+  const [value, setValue] = React.useState<string>("");
+  const [ceiling, setCeiling] = React.useState<string>("");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const mm = parseFloat(value);
+        const ceilingMm = parseFloat(ceiling);
+        if (!isNaN(mm) && mm > 0) {
+          onSubmit(mm, ceilingMm);
+        }
+      }}
+    >
+      <div className="space-y-2">
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Длина, мм"
+        />
+        <div className="text-xs text-gray-500">Измерено по экрану: {pixels.toFixed(2)} px</div>
+        <input
+          type="number"
+          step="1"
+          min="0"
+          value={ceiling}
+          onChange={(e) => setCeiling(e.target.value)}
+          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Высота потолка, мм"
+        />
+      </div>
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <button type="button" onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Отмена</button>
+        <button type="submit" className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">Сохранить</button>
+      </div>
+    </form>
+  );
+}

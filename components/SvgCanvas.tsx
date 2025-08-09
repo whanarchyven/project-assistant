@@ -19,12 +19,14 @@ interface SvgCanvasProps {
   pan: { x: number; y: number };
   elements: SvgElement[];
   onElementsChange: (elements: SvgElement[]) => void;
-  selectedTool: 'select' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon';
+  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon';
   isDrawing: boolean;
   onDrawingStart: () => void;
   onDrawingEnd: () => void;
   onElementSelect?: (elementId: string | null) => void;
   selectedElementId?: string | null;
+  calibrationMode?: boolean;
+  stageType?: 'measurement' | 'installation' | 'demolition' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
 }
 
 export default function SvgCanvas({
@@ -40,6 +42,8 @@ export default function SvgCanvas({
   onDrawingEnd,
   onElementSelect,
   selectedElementId: externalSelectedElementId,
+  calibrationMode = false,
+  stageType,
 }: SvgCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -78,12 +82,18 @@ export default function SvgCanvas({
 
   // Обработчики мыши
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Если выбран инструмент "выбор", не обрабатываем события
-    if (selectedTool === 'select') {
+    // Если выбран инструмент "взаимодействие", не обрабатываем события (пропускаем к PDF)
+    if (selectedTool === 'interact') {
       return;
     }
     
-    if (selectedTool === 'polygon') {
+    if (selectedTool === 'select') {
+      e.stopPropagation();
+      const point = getSvgPoint(e.clientX, e.clientY);
+      const hit = findElementAtPoint(point);
+      setSelectedElementId(hit ? hit.id : null);
+      return;
+    } else if (selectedTool === 'polygon') {
       // Режим рисования многоугольника
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
@@ -103,8 +113,8 @@ export default function SvgCanvas({
   }, [selectedTool, getSvgPoint, polygonPoints]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    // Если выбран инструмент "выбор", не обрабатываем события
-    if (selectedTool === 'select') {
+    // Если выбран инструмент "взаимодействие", не обрабатываем события
+    if (selectedTool === 'interact') {
       return;
     }
     
@@ -120,8 +130,8 @@ export default function SvgCanvas({
   }, [selectedTool, isDrawing, currentElement, isDragging, selectedElementId, getSvgPoint]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    // Если выбран инструмент "выбор", не обрабатываем события
-    if (selectedTool === 'select') {
+    // Если выбран инструмент "взаимодействие", не обрабатываем события
+    if (selectedTool === 'interact') {
       return;
     }
     
@@ -138,15 +148,29 @@ export default function SvgCanvas({
   // Функции рисования
   const startDrawing = useCallback((point: { x: number; y: number }) => {
     if (selectedTool === 'select') return;
+    // На этапе калибровки разрешаем рисовать только линию
+    if (calibrationMode && selectedTool !== 'line') return;
     
     const newElement: SvgElement = {
       id: `element_${Date.now()}`,
       type: selectedTool as 'line' | 'rectangle' | 'circle' | 'text' | 'polygon',
       data: getInitialData(selectedTool, point),
       style: {
-        stroke: '#000000',
+        stroke: (() => {
+          if (selectedTool === 'rectangle') {
+            if (stageType === 'demolition') return '#ef4444'; // красный
+            if (stageType === 'installation') return '#16a34a'; // зелёный
+          }
+          return '#16a34a';
+        })(),
         strokeWidth: 2,
-        fill: 'transparent',
+        fill: (() => {
+          if (selectedTool === 'rectangle') {
+            if (stageType === 'demolition') return '#ef4444';
+            if (stageType === 'installation') return '#16a34a';
+          }
+          return 'transparent';
+        })(),
         opacity: 1,
       },
     };
@@ -185,7 +209,7 @@ export default function SvgCanvas({
         type: 'polygon',
         data: { points: polygonPoints },
         style: {
-          stroke: '#000000',
+          stroke: '#16a34a',
           strokeWidth: 2,
           fill: 'transparent',
           opacity: 1,
@@ -439,7 +463,7 @@ export default function SvgCanvas({
         background: 'none',
         backgroundColor: 'transparent',
         fill: 'transparent',
-        pointerEvents: selectedTool === 'select' ? 'none' : 'auto',
+        pointerEvents: selectedTool === 'interact' ? 'none' : 'auto',
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -451,8 +475,8 @@ export default function SvgCanvas({
         }
       }}
       onWheel={(e) => {
-        // Если выбран инструмент "выбор", не обрабатываем события
-        if (selectedTool === 'select') {
+        // Если выбран инструмент "взаимодействие", не обрабатываем события
+        if (selectedTool === 'interact') {
           return;
         }
         // Блокируем колесико мыши для SVG Canvas
@@ -461,8 +485,8 @@ export default function SvgCanvas({
       onContextMenu={(e) => e.preventDefault()}
     >
       <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
-        {/* Существующие элементы (только при рисовании) */}
-        {selectedTool !== 'select' && elements.map(renderElement)}
+        {/* Существующие элементы */}
+        {elements.map(renderElement)}
 
         {/* Текущий рисуемый элемент */}
         {currentElement && renderElement(currentElement)}

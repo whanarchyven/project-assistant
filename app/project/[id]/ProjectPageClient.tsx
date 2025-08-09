@@ -40,6 +40,7 @@ export default function ProjectPageClient({ projectId }: ProjectPageClientProps)
       projectId={projectId}
       currentPage={currentPage}
       currentStage={currentStage}
+      onStageChange={setCurrentStage}
     >
       <DrawingCanvas
         projectId={projectId}
