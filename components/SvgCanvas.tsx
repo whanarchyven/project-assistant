@@ -21,7 +21,7 @@ interface SvgCanvasProps {
   pan: { x: number; y: number };
   elements: SvgElement[];
   onElementsChange: (elements: SvgElement[]) => void;
-  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window';
+  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area';
   isDrawing: boolean;
   onDrawingStart: () => void;
   onDrawingEnd: () => void;
@@ -53,6 +53,7 @@ export default function SvgCanvas({
   const [currentElement, setCurrentElement] = useState<SvgElement | null>(null);
   const [internalSelectedElementId, setInternalSelectedElementId] = useState<string | null>(null);
   const [polygonPoints, setPolygonPoints] = useState<{ x: number; y: number }[]>([]);
+  const [areaStartPoint, setAreaStartPoint] = useState<{ x: number; y: number } | null>(null);
   
   // Используем внешний selectedElementId если он передан, иначе внутренний
   const selectedElementId = externalSelectedElementId !== undefined ? externalSelectedElementId : internalSelectedElementId;
@@ -88,6 +89,10 @@ export default function SvgCanvas({
     if (selectedTool === 'interact') {
       return;
     }
+    // В калибровке/на этапе измерений разрешаем только линию и выбор
+    if ((calibrationMode || stageType === 'measurement') && !['line', 'select'].includes(selectedTool)) {
+      return;
+    }
     
     if (selectedTool === 'select') {
       e.stopPropagation();
@@ -95,15 +100,69 @@ export default function SvgCanvas({
       const hit = findElementAtPoint(point);
       setSelectedElementId(hit ? hit.id : null);
       return;
-    } else if (selectedTool === 'polygon' || selectedTool === 'room') {
+    } else if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line') {
       // Режим рисования многоугольника
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
       if (e.button === 0) { // Левая кнопка - добавить точку
+        // Автозамыкание для area/polygon/room: клик рядом с первой точкой
+        if ((selectedTool === 'polygon' || selectedTool === 'room') && polygonPoints.length >= 2) {
+          const first = polygonPoints[0];
+          const closeThreshold = 10 / (scale || 1);
+          const dist = Math.hypot(point.x - first.x, point.y - first.y);
+          if (dist <= closeThreshold) {
+            finishPolygon();
+            return;
+          }
+        }
         setPolygonPoints(prev => [...prev, point]);
-      } else if (e.button === 2) { // Правая кнопка - завершить многоугольник
-        if (polygonPoints.length >= 3) {
-          finishPolygon();
+      } else if (e.button === 2) { // Правая кнопка - завершить путь
+        // предотвращаем контекстное меню, чтобы ПКМ корректно завершал линию/полигон
+        e.preventDefault();
+        finishPolygon();
+      }
+    } else if (selectedTool === 'area') {
+      // Диагональная отрисовка прямоугольника
+      e.stopPropagation();
+      const point = getSvgPoint(e.clientX, e.clientY);
+      if (e.button === 0) {
+        if (!areaStartPoint) {
+          // Первая точка — начинаем превью прямоугольника
+          const rectEl: SvgElement = {
+            id: `element_${Date.now()}`,
+            type: 'rectangle',
+            data: { x: point.x, y: point.y, width: 0, height: 0 },
+            style: {
+              stroke: (stageType === 'demolition') ? '#ef4444' : '#16a34a',
+              strokeWidth: 2,
+              fill: (stageType === 'demolition') ? 'rgba(239,68,68,0.5)' : 'transparent',
+              opacity: 1,
+            },
+          };
+          setAreaStartPoint(point);
+          setCurrentElement(rectEl);
+          onDrawingStart();
+        } else {
+          // Вторая точка — завершаем прямоугольник
+          const x = Math.min(areaStartPoint.x, point.x);
+          const y = Math.min(areaStartPoint.y, point.y);
+          const width = Math.abs(point.x - areaStartPoint.x);
+          const height = Math.abs(point.y - areaStartPoint.y);
+          const finalRect: SvgElement = {
+            id: `element_${Date.now()}`,
+            type: 'rectangle',
+            data: { x, y, width, height },
+            style: (currentElement?.style ?? {
+              stroke: (stageType === 'demolition') ? '#ef4444' : '#16a34a',
+              strokeWidth: 2,
+              fill: (stageType === 'demolition') ? 'rgba(239,68,68,0.5)' : 'transparent',
+              opacity: 1,
+            }),
+          };
+          onElementsChange([...elements, finalRect]);
+          setCurrentElement(null);
+          setAreaStartPoint(null);
+          onDrawingEnd();
         }
       }
     } else {
@@ -112,7 +171,7 @@ export default function SvgCanvas({
       const point = getSvgPoint(e.clientX, e.clientY);
       startDrawing(point);
     }
-  }, [selectedTool, getSvgPoint, polygonPoints]);
+  }, [selectedTool, getSvgPoint, polygonPoints, calibrationMode, stageType, areaStartPoint, currentElement, elements, onDrawingStart, onDrawingEnd, onElementsChange, scale]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     // Если выбран инструмент "взаимодействие", не обрабатываем события
@@ -120,7 +179,18 @@ export default function SvgCanvas({
       return;
     }
     
-    if (isDrawing && currentElement) {
+    if (selectedTool === 'area' && areaStartPoint && currentElement) {
+      e.stopPropagation();
+      const point = getSvgPoint(e.clientX, e.clientY);
+      const x = Math.min(areaStartPoint.x, point.x);
+      const y = Math.min(areaStartPoint.y, point.y);
+      const width = Math.abs(point.x - areaStartPoint.x);
+      const height = Math.abs(point.y - areaStartPoint.y);
+      setCurrentElement({
+        ...currentElement,
+        data: { x, y, width, height },
+      });
+    } else if (isDrawing && currentElement) {
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
       updateDrawing(point);
@@ -129,11 +199,15 @@ export default function SvgCanvas({
       const point = getSvgPoint(e.clientX, e.clientY);
       moveElement(selectedElementId, point);
     }
-  }, [selectedTool, isDrawing, currentElement, isDragging, selectedElementId, getSvgPoint]);
+  }, [selectedTool, isDrawing, currentElement, isDragging, selectedElementId, getSvgPoint, areaStartPoint]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     // Если выбран инструмент "взаимодействие", не обрабатываем события
     if (selectedTool === 'interact') {
+      return;
+    }
+    // Для диагональной "Площади" не завершаем по mouseup — завершаем на второй клик
+    if (selectedTool === 'area') {
       return;
     }
     
@@ -151,9 +225,9 @@ export default function SvgCanvas({
   const startDrawing = useCallback((point: { x: number; y: number }) => {
     if (selectedTool === 'select') return;
     // На этапе калибровки разрешаем рисовать только линию
-    if (calibrationMode && selectedTool !== 'line') return;
+    if ((calibrationMode || stageType === 'measurement') && selectedTool !== 'line') return;
     // Для многоугольника/комнаты используем отдельный режим добавления точек
-    if (selectedTool === 'polygon' || selectedTool === 'room') return;
+    if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line') return;
     
     const newElement: SvgElement = {
       id: `element_${Date.now()}`,
@@ -212,6 +286,25 @@ export default function SvgCanvas({
   }, [currentElement, elements, onElementsChange, onDrawingEnd]);
 
   const finishPolygon = useCallback(() => {
+        if (selectedTool === 'line' || selectedTool === 'area') {
+      if (polygonPoints.length >= 2) {
+        const newElement: SvgElement = {
+          id: `element_${Date.now()}`,
+              type: selectedTool === 'line' ? 'line' : 'polygon',
+          data: { points: polygonPoints },
+          style: {
+            stroke: '#16a34a',
+            strokeWidth: 2,
+                fill: selectedTool === 'area' ? 'rgba(16,185,129,0.25)' : 'transparent',
+            opacity: 1,
+          },
+        };
+        onElementsChange([...elements, newElement]);
+        setPolygonPoints([]);
+        onDrawingEnd();
+      }
+      return;
+    }
     if (polygonPoints.length >= 3) {
       const isRoom = selectedTool === 'room';
       const newElement: SvgElement = {
@@ -258,6 +351,10 @@ export default function SvgCanvas({
   const updateElementData = (element: SvgElement, point: { x: number; y: number }) => {
     switch ((element.type as unknown) as 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'door' | 'window' | 'room') {
       case 'line':
+        if (Array.isArray(element.data?.points)) {
+          // Режим линии-точками: не обновляем по движению мыши
+          return element.data;
+        }
         return { ...element.data, x2: point.x, y2: point.y };
       case 'rectangle':
       case 'door':
@@ -284,6 +381,14 @@ export default function SvgCanvas({
     return elements.find(element => {
       switch (element.type) {
         case 'line':
+          if (Array.isArray(element.data?.points) && element.data.points.length >= 2) {
+            for (let i = 0; i < element.data.points.length - 1; i++) {
+              const a = element.data.points[i];
+              const b = element.data.points[i + 1];
+              if (isPointNearLine(point, { x1: a.x, y1: a.y, x2: b.x, y2: b.y })) return true;
+            }
+            return false;
+          }
           return isPointNearLine(point, element.data);
         case 'rectangle':
           return isPointInRectangle(point, element.data);
@@ -316,6 +421,12 @@ export default function SvgCanvas({
   const moveElementData = (element: SvgElement, dx: number, dy: number) => {
     switch (element.type) {
       case 'line':
+        if (Array.isArray(element.data?.points)) {
+          return {
+            ...element.data,
+            points: element.data.points.map((p: any) => ({ x: p.x + dx, y: p.y + dy })),
+          };
+        }
         return {
           ...element.data,
           x1: element.data.x1 + dx,
@@ -402,6 +513,19 @@ export default function SvgCanvas({
 
     switch (element.type) {
       case 'line':
+        if (Array.isArray(element.data?.points) && element.data.points.length >= 2) {
+          const ptsStr = element.data.points.map((p: any) => `${p.x},${p.y}`).join(' ');
+          return (
+            <polyline
+              key={element.id}
+              points={ptsStr}
+              stroke={style.stroke}
+              strokeWidth={adjustedStrokeWidth}
+              fill="none"
+              opacity={style.opacity}
+            />
+          );
+        }
         return (
           <line
             key={element.id}
@@ -502,9 +626,14 @@ export default function SvgCanvas({
         // Блокируем колесико мыши для SVG Canvas
         e.stopPropagation();
       }}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        // если рисуем линию/многоугольник/площадь, ПКМ завершает, а не открывает меню
+        if (selectedTool === 'line' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'area') {
+          e.preventDefault();
+        }
+      }}
       onDoubleClick={(e) => {
-        if (selectedTool === 'polygon' || selectedTool === 'room') {
+        if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area') {
           e.stopPropagation();
           finishPolygon();
         }
@@ -518,7 +647,7 @@ export default function SvgCanvas({
         {currentElement && renderElement(currentElement)}
 
         {/* Точки многоугольника в процессе рисования */}
-        {(selectedTool === 'polygon' || selectedTool === 'room') && polygonPoints.length > 0 && (
+        {(selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area') && polygonPoints.length > 0 && (
           <>
             {/* Линии между точками */}
             {polygonPoints.length > 1 && (

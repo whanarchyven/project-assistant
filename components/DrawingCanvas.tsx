@@ -31,6 +31,7 @@ export default function DrawingCanvas({
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationPixels, setCalibrationPixels] = useState<number | null>(null);
   const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
+  const [isRecalibrating, setIsRecalibrating] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -133,6 +134,32 @@ export default function DrawingCanvas({
     // Находим новые элементы (которые начинаются с 'element_')
     const newElementsToCreate = newElements.filter(el => el.id.startsWith('element_'));
 
+    // Вспомогательная функция вычисления длины линии в пикселях
+    const computeLinePixels = (data: any): number | null => {
+      if (Array.isArray(data?.points) && data.points.length >= 2) {
+        let total = 0;
+        for (let i = 0; i < data.points.length - 1; i++) {
+          const a = data.points[i];
+          const b = data.points[i + 1];
+          if (
+            typeof a?.x === 'number' && typeof a?.y === 'number' &&
+            typeof b?.x === 'number' && typeof b?.y === 'number'
+          ) {
+            total += Math.hypot(b.x - a.x, b.y - a.y);
+          }
+        }
+        return total;
+      }
+      const { x1, y1, x2, y2 } = data || {};
+      if (
+        typeof x1 === 'number' && typeof y1 === 'number' &&
+        typeof x2 === 'number' && typeof y2 === 'number'
+      ) {
+        return Math.hypot(x2 - x1, y2 - y1);
+      }
+      return null;
+    };
+
     // Если идет калибровка, перехватываем и разрешаем только ОДНУ линию
     if (isCalibrating) {
       // запретить любые не-линии
@@ -143,19 +170,29 @@ export default function DrawingCanvas({
       }
       if (newElementsToCreate.length > 0) {
         const lastTemp = newElementsToCreate[newElementsToCreate.length - 1];
-        const { x1, y1, x2, y2 } = lastTemp.data || {};
-        if (typeof x1 === 'number' && typeof y1 === 'number' && typeof x2 === 'number' && typeof y2 === 'number') {
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const px = Math.sqrt(dx * dx + dy * dy);
+        const px = computeLinePixels(lastTemp.data);
+        if (px && px > 0) {
           setCalibrationPixels(px);
           setCalibrationModalOpen(true);
         }
-        // очищаем несохранённые элементы (калибровочная линия не сохраняется)
-        const cleaned = newElements.filter(el => !el.id.startsWith('element_'));
-        setElements(cleaned);
+        // оставляем временную линию видимой до завершения калибровки
+        setElements(newElements);
         return;
       }
+    }
+    
+    // Если не в режиме калибровки, но пользователь рисует линию — запускаем перекалибровку
+    if (!isCalibrating && selectedTool === 'line' && newElementsToCreate.length > 0) {
+      const lastTemp = newElementsToCreate[newElementsToCreate.length - 1];
+      const px = computeLinePixels(lastTemp.data);
+      if (px && px > 0) {
+        setCalibrationPixels(px);
+        setIsRecalibrating(true);
+        setCalibrationModalOpen(true);
+      }
+      // оставляем временную линию видимой до завершения перекалибровки
+      setElements(newElements);
+      return;
     }
     console.log('Elements to create:', newElementsToCreate.length);
     
@@ -239,6 +276,7 @@ export default function DrawingCanvas({
     setIsCalibrating(false);
     setCalibrationModalOpen(false);
     setCalibrationPixels(null);
+    setIsRecalibrating(false);
   }, [calibrationPixels, updateProjectScale, projectId]);
 
   // Обработка клавиатуры
@@ -412,10 +450,10 @@ export default function DrawingCanvas({
       {calibrationModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Калибровка масштаба</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{isRecalibrating ? 'Перекалибровка масштаба' : 'Калибровка масштаба'}</h3>
             <p className="text-sm text-gray-600 mb-4">Введите реальную длину построенного отрезка (в миллиметрах) и высоту потолка (в миллиметрах):</p>
             <CalibrationForm
-              onCancel={() => { setCalibrationModalOpen(false); /* остаёмся в калибровке */ }}
+              onCancel={() => { setCalibrationModalOpen(false); setIsRecalibrating(false); /* остаёмся в калибровке при первичной */ }}
               onSubmit={async (mm: number, ceilingMm: number) => {
                 await handleSubmitCalibration(mm);
                 const num = Number(ceilingMm);
@@ -442,9 +480,26 @@ function ElementInfo({ element, projectId }: { element: SvgElement; projectId: I
   const info = useMemo(() => {
     switch (element.type) {
       case 'line': {
-        const { x1, y1, x2, y2 } = (element.data || {}) as { x1?: number; y1?: number; x2?: number; y2?: number };
-        if ([x1, y1, x2, y2].some((v) => typeof v !== 'number')) return null;
-        const px = Math.hypot((x2 as number) - (x1 as number), (y2 as number) - (y1 as number));
+        const data = (element.data || {}) as any;
+        let px: number | null = null;
+        if (Array.isArray(data.points) && data.points.length >= 2) {
+          let sum = 0;
+          for (let i = 0; i < data.points.length - 1; i++) {
+            const a = data.points[i];
+            const b = data.points[i + 1];
+            if (
+              typeof a?.x === 'number' && typeof a?.y === 'number' &&
+              typeof b?.x === 'number' && typeof b?.y === 'number'
+            ) {
+              sum += Math.hypot(b.x - a.x, b.y - a.y);
+            }
+          }
+          px = sum;
+        } else {
+          const { x1, y1, x2, y2 } = data as { x1?: number; y1?: number; x2?: number; y2?: number };
+          if ([x1, y1, x2, y2].some((v) => typeof v !== 'number')) return null;
+          px = Math.hypot((x2 as number) - (x1 as number), (y2 as number) - (y1 as number));
+        }
         const mm = mmPerPx ? (px * mmPerPx) : null;
         return { title: `Линия #${element.id.slice(-4)}`, subtitle: mm ? `${mm.toFixed(1)} мм` : `${px.toFixed(1)} px` };
       }

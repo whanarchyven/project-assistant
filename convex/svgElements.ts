@@ -244,6 +244,30 @@ export const getStageSummaryByProject = query({
         .collect();
 
       for (const el of elements) {
+        // Линейные элементы: суммируем длину
+        if (el.elementType === 'line') {
+          const d: any = el.data ?? {};
+          if (Array.isArray(d.points) && d.points.length >= 2) {
+            for (let i = 0; i < d.points.length - 1; i++) {
+              const a = d.points[i];
+              const b = d.points[i + 1];
+              if (
+                typeof a?.x === 'number' && typeof a?.y === 'number' &&
+                typeof b?.x === 'number' && typeof b?.y === 'number'
+              ) {
+                totalLengthPx += Math.hypot(b.x - a.x, b.y - a.y);
+              }
+            }
+          } else {
+            const { x1, y1, x2, y2 } = d;
+            if (
+              typeof x1 === 'number' && typeof y1 === 'number' &&
+              typeof x2 === 'number' && typeof y2 === 'number'
+            ) {
+              totalLengthPx += Math.hypot(x2 - x1, y2 - y1);
+            }
+          }
+        }
         if (el.elementType === "rectangle") {
           const { width, height } = el.data ?? {};
           if (
@@ -263,7 +287,7 @@ export const getStageSummaryByProject = query({
             }
           }
         }
-        if (args.stageType === 'markup' && el.elementType === 'polygon') {
+        if (el.elementType === 'polygon') {
           const pts = el.data?.points ?? [];
           if (Array.isArray(pts) && pts.length >= 3) {
             let perim = 0; let area2 = 0;
@@ -272,8 +296,13 @@ export const getStageSummaryByProject = query({
               perim += Math.hypot(b.x - a.x, b.y - a.y);
               area2 += (a.x * b.y - b.x * a.y);
             }
-            roomsPerimeterPx += perim;
-            roomsAreaPx2 += Math.abs(area2) / 2;
+            if (args.stageType === 'markup') {
+              roomsPerimeterPx += perim;
+              roomsAreaPx2 += Math.abs(area2) / 2;
+            } else {
+              totalAreaPx2 += Math.abs(area2) / 2;
+              // при необходимости можно добавить totalLengthPx += perim
+            }
           }
         }
       }
