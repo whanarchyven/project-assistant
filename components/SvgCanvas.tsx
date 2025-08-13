@@ -608,6 +608,8 @@ export default function SvgCanvas({
         backgroundColor: 'transparent',
         fill: 'transparent',
         pointerEvents: selectedTool === 'interact' ? 'none' : 'auto',
+        width: '100%',
+        height: '100%'
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

@@ -154,6 +154,8 @@ export default function SimplePdfViewer({
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px)`,
             transformOrigin: '0 0',
+            width: '100%',
+            height: '100%'
           }}
         >
           <PdfDocument

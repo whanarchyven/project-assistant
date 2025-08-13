@@ -78,7 +78,18 @@ export default function DrawingCanvas({
 
     updateSize();
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+
+    // Следим за изменением размеров самого контейнера (внутренние перестройки без ресайза окна)
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      observer = new ResizeObserver(() => updateSize());
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      if (observer) observer.disconnect();
+    };
   }, []);
 
   // Обработчики для PDF просмотрщика
@@ -365,6 +376,8 @@ export default function DrawingCanvas({
               transition: 'opacity 0.2s ease-in-out',
               background: 'none',
               backgroundColor: 'transparent',
+              width: '100%',
+              height: '100%'
             }}
           >
             <SvgCanvas
