@@ -441,6 +441,19 @@ export default function SvgCanvas({
           return isPointInRectangle(point, element.data);
         case 'circle':
           return isPointInCircle(point, element.data);
+        case 'polygon': {
+          const pts = (element.data?.points ?? []) as Array<{ x:number;y:number }>;
+          if (!Array.isArray(pts) || pts.length < 3) return false;
+          // попадает внутрь
+          if (isPointInPolygon(point, pts)) return true;
+          // или рядом с любой гранью
+          for (let i=0;i<pts.length;i++){
+            const a = pts[i];
+            const b = pts[(i+1)%pts.length];
+            if (isPointNearLine(point, { x1: a.x, y1: a.y, x2: b.x, y2: b.y })) return true;
+          }
+          return false;
+        }
         default:
           return false;
       }
@@ -543,6 +556,19 @@ export default function SvgCanvas({
     const dx = point.x - cx;
     const dy = point.y - cy;
     return dx * dx + dy * dy <= r * r;
+  };
+
+  const isPointInPolygon = (point: { x:number; y:number }, polygon: Array<{ x:number;y:number }>) => {
+    // Алгоритм луча
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      const intersect = ((yi > point.y) !== (yj > point.y)) &&
+        (point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 0.0000001) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
   };
 
   // Рендер SVG элементов
@@ -703,6 +729,8 @@ export default function SvgCanvas({
             const a=hoverSegment.a,b=hoverSegment.b,p=mousePoint; const vx=b.x-a.x,vy=b.y-a.y; const wx=p.x-a.x,wy=p.y-a.y; const c1=vx*wx+vy*wy; const c2=vx*vx+vy*vy; const t=c2>0?Math.max(0,Math.min(1,c1/c2)):0; const pr={x:a.x+t*vx,y:a.y+t*vy};
             const p0 = polygonPoints[0];
             const c1b=vx*(p0.x-a.x)+vy*(p0.y-a.y); const t0=c2>0?Math.max(0,Math.min(1,c1b/c2)):0; const pr0={x:a.x+t0*vx,y:a.y+t0*vy};
+            // Цвет предпросмотра в зависимости от планируемого типа: обычный красный, окно жёлтый, дверь коричневый.
+            // Так как тип выбирается в модалке после второго клика, оставляем универсально красный как базовый цвет.
             return <line x1={pr0.x} y1={pr0.y} x2={pr.x} y2={pr.y} stroke="#ef4444" strokeWidth={4} />
           })()
         )}

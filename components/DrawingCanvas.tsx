@@ -73,10 +73,12 @@ export default function DrawingCanvas({
 
   // Мутации для работы с SVG элементами
   const createElement = useMutation(api.svgElements.createSvgElement);
+  const updateSvgElement = useMutation(api.svgElements.updateSvgElement);
   // const updateElement = useMutation(api.svgElements.updateSvgElement);
   const deleteElement = useMutation(api.svgElements.deleteSvgElement);
   const clearElements = useMutation(api.svgElements.clearSvgElements);
   const clearOpeningsByPage = useMutation(api.rooms.clearOpeningsByPage);
+  const deleteRoomCascade = useMutation(api.rooms.deleteRoomCascade);
   const updateCeilingHeight = useMutation(api.projects.updateCeilingHeight);
   const createRoom = useMutation(api.rooms.createRoom);
   const createOpening = useMutation(api.rooms.createOpening);
@@ -370,16 +372,22 @@ export default function DrawingCanvas({
   }, [currentPageData, pages, currentStage, clearElements, ensurePage, projectId, currentPage]);
 
   const handleDeleteSelected = useCallback(async () => {
-    if (selectedElementId && !selectedElementId.startsWith('element_')) {
-      await deleteElement({ elementId: selectedElementId as Id<"svgElements"> });
-      setElements(prev => prev.filter(el => el.id !== selectedElementId));
-      setSelectedElementId(null);
-    } else if (selectedElementId) {
-      // Удаляем элемент из локального состояния, если он еще не сохранен в БД
-      setElements(prev => prev.filter(el => el.id !== selectedElementId));
-      setSelectedElementId(null);
+    if (!selectedElementId) return;
+    const el = elements.find(e => e.id === selectedElementId);
+    if (!el) return;
+    // Если это комната (polygon) — удаляем связанные проёмы и запись комнаты
+    if (el.type === 'polygon') {
+      const room = (roomsOnPage as any[] | undefined)?.find(r => (r.elementId as any) === selectedElementId);
+      if (room) {
+        try { await deleteRoomCascade({ roomId: room._id as any }); } catch {}
+      }
     }
-  }, [selectedElementId, deleteElement]);
+    if (!selectedElementId.startsWith('element_')) {
+      await deleteElement({ elementId: selectedElementId as Id<'svgElements'> });
+    }
+    setElements(prev => prev.filter(e => e.id !== selectedElementId));
+    setSelectedElementId(null);
+  }, [selectedElementId, elements, roomsOnPage, deleteRoomCascade, deleteElement]);
 
   // Подтверждение калибровки
   const handleSubmitCalibration = useCallback(async (millimeters: number) => {
@@ -624,6 +632,12 @@ export default function DrawingCanvas({
               let lengthPx=0; for(let i=0;i<pts.length-1;i++){ lengthPx += Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y); }
               // Создаём opening: room1 всегда заполняем, room2 если есть (для пары)
               await createOpening({ projectId, pageId: currentPageData._id, elementId: pendingOpening.elementId as any, roomId1: (pendingOpening.room1 as any) ?? ('' as any), roomId2: (pendingOpening.room2 as any) || undefined, openingType: openingType as any, heightMm: Number(openingHeight)||0, lengthPx });
+              // Обновляем цвет первой линии под выбранный тип
+              try {
+                const strokeColor = (openingType==='window'?'#f59e0b': openingType==='door'?'#8b5e3c':'#ef4444');
+                await updateSvgElement({ elementId: pendingOpening.elementId as any, style: { stroke: strokeColor, strokeWidth: 4, fill: 'transparent', opacity: 1 } as any });
+                setElements(prev => prev.map(el => el.id === pendingOpening.elementId ? ({ ...el, style: { ...el.style, stroke: strokeColor, strokeWidth: 4, fill: 'transparent', opacity: 1 } }) : el));
+              } catch {}
               // Если парный — дорисуем второй сегмент на второй стене
               if (openingPairMode && pickedPairSegment) {
                 const a = pickedPairSegment.a, b = pickedPairSegment.b;
@@ -638,16 +652,16 @@ export default function DrawingCanvas({
                 if (t1 - t0 < 1e-3) { t0 = Math.max(0, tMid - 1); t1 = Math.min(len2, tMid + 1); }
                 const p0 = { x: a.x + ux * t0, y: a.y + uy * t0 };
                 const p1 = { x: a.x + ux * t1, y: a.y + uy * t1 };
-                const pairLine = { id: `element_${Date.now()}_pair`, type: 'line' as const, data: { points: [p0, p1] }, style: { stroke: '#ef4444', strokeWidth: 4, fill: 'transparent', opacity: 1 } };
+              const pairLine = { id: `element_${Date.now()}_pair`, type: 'line' as const, data: { points: [p0, p1] }, style: { stroke: (openingType==='window'?'#f59e0b': openingType==='door'?'#8b5e3c':'#ef4444'), strokeWidth: 4, fill: 'transparent', opacity: 1 } };
                 // Оптимистический рендер
                 setElements(prev => [...prev, pairLine as any]);
                 // Сохранение второй линии в БД и создание второго opening под вторую комнату
-                const secondElementId = await createElement({
+                 const secondElementId = await createElement({
                   pageId: currentPageData._id,
                   stageType: 'markup',
                   elementType: 'line',
                   data: pairLine.data as any,
-                  style: pairLine.style as any,
+                   style: pairLine.style as any,
                   semanticType: undefined,
                 });
                 if (pendingOpening.room2) {

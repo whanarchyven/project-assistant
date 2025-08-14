@@ -76,14 +76,7 @@ export default function ProjectLayout({
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-4">
-            <button className="text-sm text-gray-600 hover:text-gray-900">
-              Настройки
-            </button>
-            <button className="text-sm text-gray-600 hover:text-gray-900">
-              Помощь
-            </button>
-          </div>
+          
         </div>
       </div>
 

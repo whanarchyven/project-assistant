@@ -207,7 +207,7 @@ export const listOpeningMaterials = query({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
-    basis: v.literal('opening_m2'),
+    basis: v.union(v.literal('opening_m2'), v.literal('per_opening')),
   })),
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -225,15 +225,16 @@ export const upsertOpeningMaterial = mutation({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
+    basis: v.optional(v.union(v.literal('opening_m2'), v.literal('per_opening'))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error('Не авторизован');
     if (args.id) {
-      await ctx.db.patch(args.id, { name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit });
+      await ctx.db.patch(args.id, { name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, ...(args.basis ? { basis: args.basis } : {}) });
     } else {
-      await ctx.db.insert('openingMaterials', { ownerUserId: userId, openingType: args.openingType, name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, basis: 'opening_m2' });
+      await ctx.db.insert('openingMaterials', { ownerUserId: userId, openingType: args.openingType, name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, basis: args.basis ?? 'opening_m2' });
     }
     return null;
   }
@@ -302,6 +303,29 @@ export const deleteOpening = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.delete(args.openingId);
+    return null;
+  }
+});
+
+// Удаление комнаты с каскадным удалением проёмов, связанных с ней (roomId1 или roomId2)
+export const deleteRoomCascade = mutation({
+  args: { roomId: v.id('rooms') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get(args.roomId);
+    if (!room) return null;
+    // Удалим все проёмы на той же странице, где участвует эта комната
+    const openings = await ctx.db
+      .query('openings')
+      .withIndex('by_page', (q)=> q.eq('pageId', room.pageId))
+      .collect();
+    for (const op of openings) {
+      if (op.roomId1 === args.roomId || op.roomId2 === args.roomId) {
+        await ctx.db.delete(op._id);
+      }
+    }
+    // Удаляем саму комнату
+    await ctx.db.delete(args.roomId);
     return null;
   }
 });

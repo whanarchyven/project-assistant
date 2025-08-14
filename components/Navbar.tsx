@@ -11,7 +11,7 @@ export default function Navbar() {
 
   return (
     <header className="w-full bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+      <div className="max-w-9xl mx-auto px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Link href="/" className="text-base font-semibold text-gray-900">
             Проектный ассистент
@@ -20,8 +20,8 @@ export default function Navbar() {
             <Link href="/projects" className="text-sm text-gray-700 hover:text-gray-900">
               Мои проекты
             </Link>
-            <Link href="/materials/defaults" className="text-sm text-gray-700 hover:text-gray-900">
-              Библиотека материалов
+            <Link href="/settings" className="text-sm text-gray-700 hover:text-gray-900">
+              Настройки
             </Link>
           </nav>
         </div>

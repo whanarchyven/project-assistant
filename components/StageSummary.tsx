@@ -58,8 +58,9 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
       arr.push(m);
       byType.set(m.roomTypeId as any, arr);
     }
-    const list: Array<{ roomId: string; name: string; material: string; qty: number; cost: number; revenue: number; profit: number; basis: string }> = [];
+    const list: Array<{ roomId: string; name: string; material: string; unit?: string; qty: number; cost: number; revenue: number; profit: number; basis: string }> = [];
     let totalWallsM2 = 0;
+    const roomInfo: Record<string, { name: string; floorM2: number; perimeterM: number; wallM2: number }> = {};
     for (const r of rooms) {
       const mats = byType.get(r.roomTypeId as any) || [];
       if (mats.length === 0) continue;
@@ -83,6 +84,7 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
         }
       }
       const wallM2 = Math.max(0, perimPx * mPerPx * (H ?? 0) - openingsAreaM2);
+      roomInfo[r.roomId as any] = { name: r.name, floorM2, perimeterM: perimPx * mPerPx, wallM2 };
       totalWallsM2 += wallM2;
       for (const mat of mats) {
         const basisVal = mat.basis === 'floor_m2' ? floorM2 : wallM2;
@@ -90,11 +92,11 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
         const cost = qty * mat.purchasePrice;
         const revenue = qty * mat.sellPrice;
         const profit = revenue - cost;
-        list.push({ roomId: r.roomId as any, name: r.name, material: mat.name, qty, cost, revenue, profit, basis: mat.basis });
+        list.push({ roomId: r.roomId as any, name: r.name, material: mat.name, unit: mat.unit, qty, cost, revenue, profit, basis: mat.basis });
       }
     }
     const totals = list.reduce((a, x) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
-    return { list, totals, totalWallsM2 };
+    return { list, totals, totalWallsM2, roomInfo };
   }, [rooms, roomTypeMats, mmPerPx, H, openings]);
 
   // Материалы по проёмам: opening/door/window
@@ -108,26 +110,52 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
     };
     const roomNameById = new Map<string, string>();
     (rooms ?? []).forEach((r: any) => { roomNameById.set(r.roomId as any, r.name); });
-    const rows: Array<{ type: 'opening'|'door'|'window'; room1?: string; room2?: string; material: string; lengthM: number; areaM2: number; qty: number; cost: number; revenue: number; profit: number }>=[];
+    const rows: Array<{ openingId: string; type: 'opening'|'door'|'window'; room1?: string; room2?: string; material: string; unit?: string; basis: 'opening_m2'|'per_opening'; lengthM: number; areaM2: number; qty: number; cost: number; revenue: number; profit: number }>=[];
+    const groups: Array<{ openingId: string; type: 'opening'|'door'|'window'; room1?: string; room2?: string; lengthM: number; areaM2: number; materials: Array<{ material: string; unit?: string; basis: 'opening_m2'|'per_opening'; qty: number; cost: number; revenue: number; profit: number }> }> = [];
     const perType = { opening: { count: 0, areaM2: 0, lengthM: 0 }, door: { count: 0, areaM2: 0, lengthM: 0 }, window: { count: 0, areaM2: 0, lengthM: 0 } } as Record<'opening'|'door'|'window', { count:number; areaM2:number; lengthM:number }>;
+    const usedPairKeys = new Set<string>();
     for (const op of (openings as any[])) {
       const lengthM = op.lengthPx * mPerPx;
       const heightM = (op.heightMm ?? 0) / 1000;
       const areaM2 = Math.max(0, lengthM * heightM);
+      const rid1 = op.roomId1 as string; const rid2 = (op.roomId2 as string | undefined) || undefined;
+      let labelRoom1: string | undefined = roomNameById.get(rid1 as any);
+      let labelRoom2: string | undefined = rid2 ? roomNameById.get(rid2 as any) : undefined;
+      // Группируем парные проёмы по неориентированному ключу
+      let process = true;
+      if (rid2) {
+        const a = String(rid1) < String(rid2) ? rid1 : rid2;
+        const b = a === rid1 ? rid2! : rid1;
+        const roundedPx = Math.round((op.lengthPx ?? 0) * 10) / 10;
+        const pairKey = `${op.openingType}|${a}|${b}|${op.heightMm ?? 0}|${roundedPx}`;
+        if (usedPairKeys.has(pairKey)) {
+          process = false;
+        } else {
+          usedPairKeys.add(pairKey);
+          // для отображения стрелки используем отсортированный порядок имён
+          labelRoom1 = roomNameById.get(a as any);
+          labelRoom2 = roomNameById.get(b as any);
+        }
+      }
+      if (!process) continue;
       perType[op.openingType as 'opening'|'door'|'window'].count += 1;
       perType[op.openingType as 'opening'|'door'|'window'].areaM2 += areaM2;
       perType[op.openingType as 'opening'|'door'|'window'].lengthM += lengthM;
       const mats = byType[op.openingType as 'opening'|'door'|'window'] || [];
+      const groupMaterials: Array<{ material: string; unit?: string; basis: 'opening_m2'|'per_opening'; qty: number; cost: number; revenue: number; profit: number }> = [];
       for (const m of mats) {
-        const qty = (m.consumptionPerUnit ?? 0) * areaM2;
+        const basis: 'opening_m2'|'per_opening' = (m.basis === 'per_opening') ? 'per_opening' : 'opening_m2';
+        const qty = (m.consumptionPerUnit ?? 0) * (basis === 'opening_m2' ? areaM2 : 1);
         const cost = qty * (m.purchasePrice ?? 0);
         const revenue = qty * (m.sellPrice ?? 0);
         const profit = revenue - cost;
-        rows.push({ type: op.openingType as any, room1: roomNameById.get(op.roomId1 as any), room2: op.roomId2 ? roomNameById.get(op.roomId2 as any) : undefined, material: m.name, lengthM, areaM2, qty, cost, revenue, profit });
+        rows.push({ openingId: op._id as any, type: op.openingType as any, room1: labelRoom1, room2: labelRoom2, material: m.name, unit: m.unit, basis, lengthM, areaM2, qty, cost, revenue, profit });
+        groupMaterials.push({ material: m.name, unit: m.unit, basis, qty, cost, revenue, profit });
       }
+      groups.push({ openingId: op._id as any, type: op.openingType as any, room1: labelRoom1, room2: labelRoom2, lengthM, areaM2, materials: groupMaterials });
     }
-    const totals = rows.reduce((a,x)=>({ qty:a.qty+x.qty, cost:a.cost+x.cost, revenue:a.revenue+x.revenue, profit:a.profit+x.profit }), { qty:0, cost:0, revenue:0, profit:0 });
-    return { rows, totals, perType };
+    const totals = groups.flatMap(g => g.materials).reduce((a,x)=>({ qty:a.qty+x.qty, cost:a.cost+x.cost, revenue:a.revenue+x.revenue, profit:a.profit+x.profit }), { qty:0, cost:0, revenue:0, profit:0 });
+    return { rows, groups, totals, perType };
   }, [openings, matsOpening, matsDoor, matsWindow, rooms, mmPerPx]);
 
   // Материалы по триггерам (берём проектные или дефолтные), но ТОЛЬКО двери/окна. Комнаты считаются по типам в roomMaterialsTotals
@@ -163,62 +191,38 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Разметка</div>
         <div className="ml-auto">
-          <a className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 mr-2" href="/rooms/types">Типы комнат</a>
-          <a className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 mr-2" href="/openings/materials">Материалы проёмов</a>
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShow(true)} disabled={!materials}>Материалы</button>
         </div>
       </div>
-          <div className="px-4 py-4 grid grid-cols-1 gap-4">
+      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {/* Комнаты: кратко */}
         <div className="rounded-md bg-emerald-50 px-3 py-3 border border-emerald-100">
           <div className="text-xs uppercase tracking-wide text-emerald-700/80">Комнаты</div>
           <div className="mt-1 text-sm text-gray-700">P: {derived ? nf.format(derived.rooms.perimeterM) : '—'} м</div>
-          <div className="text-sm text-gray-700">S: {derived ? nf.format(derived.rooms.areaM2) : '—'} м²</div>
-          {roomMaterialsTotals && (
-            <div className="mt-2 text-xs text-gray-600">Материалы по типам: Затраты {money.format(roomMaterialsTotals.totals.cost)}, Профит {money.format(roomMaterialsTotals.totals.profit)}</div>
-          )}
-          {/* двери/окна считаем как раньше, комнаты считаем по типам */}
-          {materials && (
-            <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="rounded bg-white/60 border border-emerald-100 px-2 py-1">
-                <div className="text-[11px] text-emerald-700/80">Затраты (по типам)</div>
-                <div className="text-sm font-medium text-emerald-700">{roomMaterialsTotals ? money.format(roomMaterialsTotals.totals.cost) : '—'}</div>
-              </div>
-              <div className="rounded bg-white/60 border border-emerald-100 px-2 py-1">
-                <div className="text-[11px] text-emerald-700/80">Профит (по типам)</div>
-                <div className="text-sm font-medium text-emerald-700">{roomMaterialsTotals ? money.format(roomMaterialsTotals.totals.profit) : '—'}</div>
-              </div>
-            </div>
-          )}
+          <div className="text-sm text-gray-700">S пола: {derived ? nf.format(derived.rooms.areaM2) : '—'} м²</div>
+          <div className="text-sm text-gray-700">S стен: {roomMaterialsTotals ? nf.format(roomMaterialsTotals.totalWallsM2) : '—'} м²</div>
         </div>
-
-        {/* Убрали отдельную карточку дверей из хедера */}
-
-        {/* Проёмы: разбивка по типам табами */}
-        {openingsMaterialsTotals && (
-          <div className="rounded-md bg-white px-3 py-3 border border-gray-200 col-span-1 sm:col-span-3">
-            <div className="text-xs uppercase tracking-wide text-gray-700/80 mb-2">Проёмы</div>
-            <div className="grid grid-cols-1 gap-3">
-              {/* Обычные проёмы */}
-              <div className="rounded-md border border-gray-200">
-                <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">Проёмы</div>
-                <div className="px-3 py-2 text-xs text-gray-600">Кол-во: {openingsMaterialsTotals.perType.opening.count}, Площадь: {nf.format(openingsMaterialsTotals.perType.opening.areaM2)} м²</div>
-                <OpeningsTable rows={openingsMaterialsTotals.rows.filter(r => r.type==='opening')} nf={nf} money={money} colorClass="text-gray-700" borderClass="border-gray-200" />
-              </div>
-              {/* Двери */}
-              <div className="rounded-md border" style={{ borderColor: '#e0cbb8' }}>
-                <div className="px-3 py-2 text-sm font-medium" style={{ backgroundColor: '#f3e8e0', borderBottom: '1px solid #e0cbb8', color: '#8b5e3c' }}>Двери</div>
-                <div className="px-3 py-2 text-xs" style={{ color: '#8b5e3c' }}>Кол-во: {openingsMaterialsTotals.perType.door.count}, Площадь: {nf.format(openingsMaterialsTotals.perType.door.areaM2)} м²</div>
-                <OpeningsTable rows={openingsMaterialsTotals.rows.filter(r => r.type==='door')} nf={nf} money={money} colorClass="" borderClass="" />
-              </div>
-              {/* Окна */}
-              <div className="rounded-md border border-yellow-100">
-                <div className="px-3 py-2 text-sm font-medium bg-yellow-50 border-b border-yellow-100 text-yellow-700/80">Окна</div>
-                <div className="px-3 py-2 text-xs text-yellow-700/80">Кол-во: {openingsMaterialsTotals.perType.window.count}, Площадь: {nf.format(openingsMaterialsTotals.perType.window.areaM2)} м²</div>
-                <OpeningsTable rows={openingsMaterialsTotals.rows.filter(r => r.type==='window')} nf={nf} money={money} colorClass="text-yellow-700" borderClass="border-yellow-100" />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Проёмы: кратко */}
+        <div className="rounded-md px-3 py-3 border border-rose-200 bg-rose-50">
+          <div className="text-xs uppercase tracking-wide text-rose-700/80">Проёмы</div>
+          <div className="mt-1 text-sm text-gray-700">Кол-во: {openingsMaterialsTotals ? openingsMaterialsTotals.perType.opening.count : '—'} шт</div>
+          <div className="text-sm text-gray-700">Длина: {openingsMaterialsTotals ? nf.format(openingsMaterialsTotals.perType.opening.lengthM) : '—'} м</div>
+          <div className="text-sm text-gray-700">S: {openingsMaterialsTotals ? nf.format(openingsMaterialsTotals.perType.opening.areaM2) : '—'} м²</div>
+        </div>
+        {/* Двери: кратко */}
+        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: '#f3e8e0', borderColor: '#e0cbb8' }}>
+          <div className="text-xs uppercase tracking-wide" style={{ color: '#8b5e3c' }}>Двери</div>
+          <div className="mt-1 text-sm" style={{ color: '#8b5e3c' }}>Кол-во: {openingsMaterialsTotals ? openingsMaterialsTotals.perType.door.count : '—'} шт</div>
+          <div className="text-sm" style={{ color: '#8b5e3c' }}>Длина: {openingsMaterialsTotals ? nf.format(openingsMaterialsTotals.perType.door.lengthM) : '—'} м</div>
+          <div className="text-sm" style={{ color: '#8b5e3c' }}>S: {openingsMaterialsTotals ? nf.format(openingsMaterialsTotals.perType.door.areaM2) : '—'} м²</div>
+        </div>
+        {/* Окна: кратко */}
+        <div className="rounded-md border border-yellow-100 px-3 py-3 bg-yellow-50">
+          <div className="text-xs uppercase tracking-wide text-yellow-700/80">Окна</div>
+          <div className="mt-1 text-sm text-yellow-700/80">Кол-во: {openingsMaterialsTotals ? openingsMaterialsTotals.perType.window.count : '—'} шт</div>
+          <div className="text-sm text-yellow-700/80">Длина: {openingsMaterialsTotals ? nf.format(openingsMaterialsTotals.perType.window.lengthM) : '—'} м</div>
+          <div className="text-sm text-yellow-700/80">S: {openingsMaterialsTotals ? nf.format(openingsMaterialsTotals.perType.window.areaM2) : '—'} м²</div>
+        </div>
       </div>
       {!H && (<div className="px-4 pb-4 -mt-2 text-xs text-gray-500">Для корректного расчёта укажите высоту потолка.</div>)}
 
@@ -230,53 +234,20 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
               <button className="text-gray-500 hover:text-gray-700" onClick={() => setShow(false)}>Закрыть</button>
             </div>
             <div className="p-4 grid grid-cols-1 gap-4 max-h-[75vh] overflow-y-auto">
-              {(['doors','windows'] as const).map((key) => (
-                <div key={key} className="rounded-md border border-gray-200 overflow-hidden">
-                  <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">{key==='doors'?'Двери':'Окна'}</div>
-                  <div className="p-2 overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead className="text-gray-600">
-                        <tr>
-                          <th className="text-left p-1">Материал</th>
-                          <th className="text-left p-1">Расход/ед.</th>
-                          <th className="text-left p-1">Ед.</th>
-                          <th className="text-left p-1">Кол-во</th>
-                          <th className="text-left p-1">Закупка</th>
-                          <th className="text-left p-1">Реализация</th>
-                          <th className="text-left p-1">Профит</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {materials[key].list.map((m: { _id?: string; name: string; unit?: string; consumptionPerUnit: number; qty: number; cost: number; revenue: number; profit: number }, idx: number) => (
-                          <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="p-1">{m.name}</td>
-                            <td className="p-1">{nf.format(m.consumptionPerUnit)}</td>
-                            <td className="p-1">{m.unit || '-'}</td>
-                            <td className="p-1">{nf.format(m.qty)}</td>
-                            <td className="p-1">{money.format(m.cost)}</td>
-                            <td className="p-1">{money.format(m.revenue)}</td>
-                            <td className="p-1">{money.format(m.profit)}</td>
-                          </tr>
-                        ))}
-                        <tr className="bg-gray-100 font-medium">
-                          <td className="p-1" colSpan={3}>Итого</td>
-                          <td className="p-1">{nf.format(materials[key].totals.qty)}</td>
-                          <td className="p-1">{money.format(materials[key].totals.cost)}</td>
-                          <td className="p-1">{money.format(materials[key].totals.revenue)}</td>
-                          <td className="p-1">{money.format(materials[key].totals.profit)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+
+              {/* Убрали отдельные таблицы дверей и окон из попапа */}
               {roomMaterialsTotals && (
                 <div className="rounded-md border border-gray-200 overflow-hidden">
                   <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">Комнаты</div>
                   <div className="p-2 space-y-4 max-h-[60vh] overflow-y-auto">
                     {Array.from(new Map(roomMaterialsTotals.list.map(r => [r.roomId, r.name])).entries()).map(([roomId, roomName]) => (
                       <div key={roomId} className="rounded-md border border-gray-100">
-                        <div className="px-3 py-2 text-sm font-medium bg-white border-b border-gray-100">{roomName}</div>
+                        <div className="px-3 py-2 text-sm font-medium bg-white border-b border-gray-100 flex flex-wrap gap-4">
+                          <span>{roomName}</span>
+                          <span className="text-gray-600">P: {roomMaterialsTotals.roomInfo[roomId] ? nf.format(roomMaterialsTotals.roomInfo[roomId].perimeterM) : '—'} м</span>
+                          <span className="text-gray-600">S пола: {roomMaterialsTotals.roomInfo[roomId] ? nf.format(roomMaterialsTotals.roomInfo[roomId].floorM2) : '—'} м²</span>
+                          <span className="text-gray-600">S стен: {roomMaterialsTotals.roomInfo[roomId] ? nf.format(roomMaterialsTotals.roomInfo[roomId].wallM2) : '—'} м²</span>
+                        </div>
                         <div className="p-2 overflow-x-auto">
                           <table className="w-full text-xs">
                             <thead className="text-gray-600">
@@ -317,6 +288,56 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
                   </div>
                 </div>
               )}
+
+              {/* Подробные таблицы проёмов вынесены в попап: группировка по каждому проёму */}
+              {openingsMaterialsTotals && (
+                <div className="rounded-md border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">Проёмы / Двери / Окна</div>
+                  <div className="p-2 space-y-3 max-h-[65vh] overflow-y-auto">
+                    {openingsMaterialsTotals.groups.map((g, idx)=> (
+                      <div key={g.openingId ?? idx} className="rounded border border-gray-100">
+                        <div className="px-3 py-2 text-sm font-medium bg-white border-b border-gray-100 flex flex-wrap gap-4">
+                          <span>{g.type==='opening'?'Проём':g.type==='door'?'Дверь':'Окно'}</span>
+                          <span className="text-gray-600">{g.room1}{g.room2 ? ' → ' + g.room2 : ''}</span>
+                          <span className="text-gray-600">Длина: {nf.format(g.lengthM)} м</span>
+                          <span className="text-gray-600">S: {nf.format(g.areaM2)} м²</span>
+                        </div>
+                        <div className="p-2 overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead className="text-gray-600">
+                              <tr>
+                                <th className="text-left p-1">Материал</th>
+                                <th className="text-left p-1">Основа</th>
+                                <th className="text-left p-1">Норма</th>
+                                <th className="text-left p-1">Ед.</th>
+                                <th className="text-left p-1">Кол-во</th>
+                                <th className="text-left p-1">Закупка</th>
+                                <th className="text-left p-1">Реализация</th>
+                                <th className="text-left p-1">Профит</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.materials.map((m, j)=> (
+                                <tr key={j} className={j%2===0?'bg-white':'bg-gray-50'}>
+                                  <td className="p-1">{m.material}</td>
+                                  <td className="p-1">{m.basis==='per_opening'?'На проём':'На м² проёма'}</td>
+                                  <td className="p-1">{m.basis==='per_opening' ? nf.format(m.qty) : nf.format(m.qty / (g.areaM2 || 1))}</td>
+                                  <td className="p-1">{m.unit || '-'}</td>
+                                  <td className="p-1">{nf.format(m.qty)} {m.unit ? m.unit : ''}</td>
+                                  <td className="p-1">{money.format(m.cost)}</td>
+                                  <td className="p-1">{money.format(m.revenue)}</td>
+                                  <td className="p-1">{money.format(m.profit)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
             </div>
           </div>
         </div>

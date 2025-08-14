@@ -187,7 +187,8 @@ export default defineSchema({
     purchasePrice: v.number(),
     sellPrice: v.number(),
     unit: v.optional(v.string()),
-    basis: v.literal('opening_m2'),
+    // основа расчёта: по площади проёма (м²) или фиксировано "на 1 проём"
+    basis: v.union(v.literal('opening_m2'), v.literal('per_opening')),
   }).index("by_owner_and_type", ["ownerUserId", "openingType"]),
 
   // Проёмы/двери/окна на стенах комнат
