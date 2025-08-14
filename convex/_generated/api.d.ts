@@ -18,6 +18,7 @@ import type * as http from "../http.js";
 import type * as materials from "../materials.js";
 import type * as myFunctions from "../myFunctions.js";
 import type * as projects from "../projects.js";
+import type * as rooms from "../rooms.js";
 import type * as svgElements from "../svgElements.js";
 
 /**
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   materials: typeof materials;
   myFunctions: typeof myFunctions;
   projects: typeof projects;
+  rooms: typeof rooms;
   svgElements: typeof svgElements;
 }>;
 export declare const api: FilterApi<

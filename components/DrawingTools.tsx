@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area';
+export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening';
 
 interface DrawingToolsProps {
   selectedTool: DrawingTool;
@@ -35,6 +35,16 @@ export default function DrawingTools({
       ),
     },
     {
+      id: 'opening' as DrawingTool,
+      name: 'Проём',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 20V4h8v16" className="stroke-gray-600" />
+          <path d="M12 12h8" className="stroke-gray-600" />
+        </svg>
+      ),
+    },
+    {
       id: 'line' as DrawingTool,
       name: 'Линия',
       icon: (
@@ -63,10 +73,10 @@ export default function DrawingTools({
     },
     {
       id: 'area' as DrawingTool,
-      name: 'Площадь',
+      name: 'Прямоугольная область',
       icon: (
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <polygon points="4,6 12,4 20,10 16,20 6,18" className="stroke-emerald-600" />
+          <rect x="4" y="4" width="16" height="16" className="stroke-red-600" />
         </svg>
       ),
     },
@@ -99,9 +109,9 @@ export default function DrawingTools({
     },
   ];
 
-  const restrictedStageToolsInstallation: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','rectangle'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const restrictedStageToolsInstallation: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const restrictedStageToolsDemolition: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
-  const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','window','door'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','opening'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   let tools = baseTools;
   if (stageType === 'installation') tools = restrictedStageToolsInstallation;
   if (stageType === 'demolition') tools = restrictedStageToolsDemolition;

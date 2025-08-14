@@ -291,11 +291,19 @@ export const getStageSummaryByProject = query({
           const pts = el.data?.points ?? [];
           if (Array.isArray(pts) && pts.length >= 3) {
             let perim = 0; let area2 = 0;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             for (let i = 0; i < pts.length; i++) {
               const a = pts[i], b = pts[(i+1)%pts.length];
               perim += Math.hypot(b.x - a.x, b.y - a.y);
               area2 += (a.x * b.y - b.x * a.y);
+              minX = Math.min(minX, a.x); minY = Math.min(minY, a.y);
+              maxX = Math.max(maxX, a.x); maxY = Math.max(maxY, a.y);
             }
+            // длина стены как бОльшая сторона ограничивающего прямоугольника
+            const bboxW = maxX - minX;
+            const bboxH = maxY - minY;
+            const major = Math.max(Math.abs(bboxW), Math.abs(bboxH));
+            totalLengthPx += major;
             if (args.stageType === 'markup') {
               roomsPerimeterPx += perim;
               roomsAreaPx2 += Math.abs(area2) / 2;

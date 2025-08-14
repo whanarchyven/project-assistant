@@ -148,4 +148,57 @@ export default defineSchema({
       v.literal("window")
     )),
   }).index("by_project_and_stage", ["projectId", "stageType"]),
+
+  // Типы комнат пользователя
+  roomTypes: defineTable({
+    ownerUserId: v.id("users"),
+    name: v.string(),
+  }).index("by_owner", ["ownerUserId"]),
+
+  // Материалы для конкретного типа комнаты (в библиотеке типов комнат)
+  roomTypeMaterials: defineTable({
+    ownerUserId: v.id("users"),
+    roomTypeId: v.id("roomTypes"),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.union(v.literal('floor_m2'), v.literal('wall_m2')), // от чего считается расход
+  }).index("by_owner_and_room_type", ["ownerUserId", "roomTypeId"]),
+
+  // Комнаты проекта, сопоставление с элементом svg (polygon)
+  rooms: defineTable({
+    projectId: v.id("projects"),
+    pageId: v.id("pages"),
+    elementId: v.id("svgElements"),
+    name: v.string(),
+    roomTypeId: v.id("roomTypes"),
+  })
+    .index("by_project_and_page", ["projectId", "pageId"]) 
+    .index("by_page", ["pageId"]),
+
+  // Материалы для предустановленных типов проёмов (door/window/opening)
+  openingMaterials: defineTable({
+    ownerUserId: v.id("users"),
+    openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.literal('opening_m2'),
+  }).index("by_owner_and_type", ["ownerUserId", "openingType"]),
+
+  // Проёмы/двери/окна на стенах комнат
+  openings: defineTable({
+    projectId: v.id("projects"),
+    pageId: v.id("pages"),
+    elementId: v.id("svgElements"), // линия на схеме
+    roomId1: v.id("rooms"),
+    roomId2: v.optional(v.id("rooms")),
+    openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')),
+    heightMm: v.number(),
+    lengthPx: v.number(),
+  }).index("by_project", ["projectId"]).index("by_page", ["pageId"]),
 });

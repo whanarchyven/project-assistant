@@ -13,6 +13,12 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
   const summary = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'markup' });
   const projectMaterialsRooms = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'markup' });
   const defaultsRooms = useQuery(api.materials.listDefaults, { stageType: 'markup' });
+  const rooms = useQuery(api.rooms.getRoomsWithGeometryByProject, { projectId });
+  const roomTypeMats = useQuery(api.rooms.listAllRoomTypeMaterials, {} as any);
+  const openings = useQuery(api.rooms.listOpeningsByProject, { projectId });
+  const matsOpening = useQuery(api.rooms.listOpeningMaterials, { openingType: 'opening' } as any);
+  const matsDoor = useQuery(api.rooms.listOpeningMaterials, { openingType: 'door' } as any);
+  const matsWindow = useQuery(api.rooms.listOpeningMaterials, { openingType: 'window' } as any);
 
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
@@ -42,27 +48,108 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
     return { rooms: tRooms, doors: tDoors, windows: tWindows };
   }, [derived, H]);
 
-  // Материалы по триггерам (берём проектные или дефолтные)
+  // Расчёты по комнатам по типовым материалам
+  const roomMaterialsTotals = useMemo(() => {
+    if (!rooms || !roomTypeMats || !mmPerPx) return undefined;
+    const mPerPx = mmPerPx / 1000;
+    const byType = new Map<string, Array<any>>();
+    for (const m of roomTypeMats) {
+      const arr = byType.get(m.roomTypeId as any) || [];
+      arr.push(m);
+      byType.set(m.roomTypeId as any, arr);
+    }
+    const list: Array<{ roomId: string; name: string; material: string; qty: number; cost: number; revenue: number; profit: number; basis: string }> = [];
+    let totalWallsM2 = 0;
+    for (const r of rooms) {
+      const mats = byType.get(r.roomTypeId as any) || [];
+      if (mats.length === 0) continue;
+      // площадь пола комнаты (м²)
+      let areaPx2 = 0; let perimPx = 0;
+      const pts = r.points;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i+1)%pts.length];
+        perimPx += Math.hypot(b.x - a.x, b.y - a.y);
+        areaPx2 += (a.x * b.y - b.x * a.y);
+      }
+      const floorM2 = Math.abs(areaPx2) / 2 * (mPerPx * mPerPx);
+      // Вычитаем площадь проёмов на стенах комнаты (пока просто суммарно по roomId1/2)
+      let openingsAreaM2 = 0;
+      if (openings && H) {
+        const rel = (openings as any[]).filter(o => o.roomId1 === (r.roomId as any) || o.roomId2 === (r.roomId as any));
+        for (const op of rel) {
+          const lengthM = op.lengthPx * mPerPx;
+          const heightM = (op.heightMm ?? 0) / 1000;
+          openingsAreaM2 += lengthM * heightM;
+        }
+      }
+      const wallM2 = Math.max(0, perimPx * mPerPx * (H ?? 0) - openingsAreaM2);
+      totalWallsM2 += wallM2;
+      for (const mat of mats) {
+        const basisVal = mat.basis === 'floor_m2' ? floorM2 : wallM2;
+        const qty = mat.consumptionPerUnit * basisVal;
+        const cost = qty * mat.purchasePrice;
+        const revenue = qty * mat.sellPrice;
+        const profit = revenue - cost;
+        list.push({ roomId: r.roomId as any, name: r.name, material: mat.name, qty, cost, revenue, profit, basis: mat.basis });
+      }
+    }
+    const totals = list.reduce((a, x) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+    return { list, totals, totalWallsM2 };
+  }, [rooms, roomTypeMats, mmPerPx, H, openings]);
+
+  // Материалы по проёмам: opening/door/window
+  const openingsMaterialsTotals = useMemo(() => {
+    if (!openings || !mmPerPx) return undefined;
+    const mPerPx = mmPerPx / 1000;
+    const byType: Record<'opening'|'door'|'window', Array<any>> = {
+      opening: (matsOpening ?? []) as any,
+      door: (matsDoor ?? []) as any,
+      window: (matsWindow ?? []) as any,
+    };
+    const roomNameById = new Map<string, string>();
+    (rooms ?? []).forEach((r: any) => { roomNameById.set(r.roomId as any, r.name); });
+    const rows: Array<{ type: 'opening'|'door'|'window'; room1?: string; room2?: string; material: string; lengthM: number; areaM2: number; qty: number; cost: number; revenue: number; profit: number }>=[];
+    const perType = { opening: { count: 0, areaM2: 0, lengthM: 0 }, door: { count: 0, areaM2: 0, lengthM: 0 }, window: { count: 0, areaM2: 0, lengthM: 0 } } as Record<'opening'|'door'|'window', { count:number; areaM2:number; lengthM:number }>;
+    for (const op of (openings as any[])) {
+      const lengthM = op.lengthPx * mPerPx;
+      const heightM = (op.heightMm ?? 0) / 1000;
+      const areaM2 = Math.max(0, lengthM * heightM);
+      perType[op.openingType as 'opening'|'door'|'window'].count += 1;
+      perType[op.openingType as 'opening'|'door'|'window'].areaM2 += areaM2;
+      perType[op.openingType as 'opening'|'door'|'window'].lengthM += lengthM;
+      const mats = byType[op.openingType as 'opening'|'door'|'window'] || [];
+      for (const m of mats) {
+        const qty = (m.consumptionPerUnit ?? 0) * areaM2;
+        const cost = qty * (m.purchasePrice ?? 0);
+        const revenue = qty * (m.sellPrice ?? 0);
+        const profit = revenue - cost;
+        rows.push({ type: op.openingType as any, room1: roomNameById.get(op.roomId1 as any), room2: op.roomId2 ? roomNameById.get(op.roomId2 as any) : undefined, material: m.name, lengthM, areaM2, qty, cost, revenue, profit });
+      }
+    }
+    const totals = rows.reduce((a,x)=>({ qty:a.qty+x.qty, cost:a.cost+x.cost, revenue:a.revenue+x.revenue, profit:a.profit+x.profit }), { qty:0, cost:0, revenue:0, profit:0 });
+    return { rows, totals, perType };
+  }, [openings, matsOpening, matsDoor, matsWindow, rooms, mmPerPx]);
+
+  // Материалы по триггерам (берём проектные или дефолтные), но ТОЛЬКО двери/окна. Комнаты считаются по типам в roomMaterialsTotals
   const materials = useMemo(() => {
     if (!triggers) return undefined;
     const src = (projectMaterialsRooms && projectMaterialsRooms.length > 0) ? projectMaterialsRooms : (defaultsRooms ?? []);
     if (src.length === 0) return undefined;
     type Mat = { triggerType?: 'room'|'door'|'window'; consumptionPerUnit: number; purchasePrice: number; sellPrice: number; name: string; unit?: string; _id?: string };
     type MatRow = Mat & { qty: number; cost: number; revenue: number; profit: number };
-    const group: { rooms: Array<MatRow>; doors: Array<MatRow>; windows: Array<MatRow> } = { rooms: [], doors: [], windows: [] };
+    const group: { doors: Array<MatRow>; windows: Array<MatRow> } = { doors: [], windows: [] };
     for (const row of src as Array<Mat>) {
       const t = row.triggerType;
-      if (!t) continue;
-      const trigVal = t === 'room' ? triggers.rooms : t === 'door' ? triggers.doors : triggers.windows;
+      if (!t || t === 'room') continue; // исключаем комнатные материалы из старой логики
+      const trigVal = t === 'door' ? triggers.doors : triggers.windows;
       const qty = row.consumptionPerUnit * trigVal;
       const cost = qty * row.purchasePrice;
       const revenue = qty * row.sellPrice;
       const profit = revenue - cost;
-      group[t === 'room' ? 'rooms' : t === 'door' ? 'doors' : 'windows'].push({ ...row, qty, cost, revenue, profit });
+      group[t === 'door' ? 'doors' : 'windows'].push({ ...row, qty, cost, revenue, profit });
     }
     const sum = (list: Array<MatRow>) => list.reduce((a, x) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
     return {
-      rooms: { list: group.rooms, totals: sum(group.rooms) },
       doors: { list: group.doors, totals: sum(group.doors) },
       windows: { list: group.windows, totals: sum(group.windows) },
     };
@@ -76,64 +163,62 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Разметка</div>
         <div className="ml-auto">
+          <a className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 mr-2" href="/rooms/types">Типы комнат</a>
+          <a className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 mr-2" href="/openings/materials">Материалы проёмов</a>
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShow(true)} disabled={!materials}>Материалы</button>
         </div>
       </div>
-      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="px-4 py-4 grid grid-cols-1 gap-4">
         <div className="rounded-md bg-emerald-50 px-3 py-3 border border-emerald-100">
           <div className="text-xs uppercase tracking-wide text-emerald-700/80">Комнаты</div>
           <div className="mt-1 text-sm text-gray-700">P: {derived ? nf.format(derived.rooms.perimeterM) : '—'} м</div>
           <div className="text-sm text-gray-700">S: {derived ? nf.format(derived.rooms.areaM2) : '—'} м²</div>
-          {/* триггер скрыт по просьбе пользователя */}
+          {roomMaterialsTotals && (
+            <div className="mt-2 text-xs text-gray-600">Материалы по типам: Затраты {money.format(roomMaterialsTotals.totals.cost)}, Профит {money.format(roomMaterialsTotals.totals.profit)}</div>
+          )}
+          {/* двери/окна считаем как раньше, комнаты считаем по типам */}
           {materials && (
             <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="rounded bg-white/60 border border-emerald-100 px-2 py-1">
-                <div className="text-[11px] text-emerald-700/80">Затраты</div>
-                <div className="text-sm font-medium text-emerald-700">{money.format(materials.rooms.totals.cost)}</div>
+                <div className="text-[11px] text-emerald-700/80">Затраты (по типам)</div>
+                <div className="text-sm font-medium text-emerald-700">{roomMaterialsTotals ? money.format(roomMaterialsTotals.totals.cost) : '—'}</div>
               </div>
               <div className="rounded bg-white/60 border border-emerald-100 px-2 py-1">
-                <div className="text-[11px] text-emerald-700/80">Профит</div>
-                <div className="text-sm font-medium text-emerald-700">{money.format(materials.rooms.totals.profit)}</div>
+                <div className="text-[11px] text-emerald-700/80">Профит (по типам)</div>
+                <div className="text-sm font-medium text-emerald-700">{roomMaterialsTotals ? money.format(roomMaterialsTotals.totals.profit) : '—'}</div>
               </div>
             </div>
           )}
         </div>
 
-        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: '#f3e8e0', borderColor: '#e0cbb8' }}>
-          <div className="text-xs uppercase tracking-wide" style={{ color: '#8b5e3c' }}>Двери</div>
-          <div className="text-sm text-gray-700">S: {derived ? nf.format(derived.doors.areaM2) : '—'} м²</div>
-          {/* триггер скрыт по просьбе пользователя */}
-          {materials && (
-            <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="rounded bg-white/60 px-2 py-1" style={{ border: '1px solid #e0cbb8' }}>
-                <div className="text-[11px]" style={{ color: '#8b5e3c' }}>Затраты</div>
-                <div className="text-sm font-medium" style={{ color: '#8b5e3c' }}>{money.format(materials.doors.totals.cost)}</div>
-              </div>
-              <div className="rounded bg-white/60 px-2 py-1" style={{ border: '1px solid #e0cbb8' }}>
-                <div className="text-[11px]" style={{ color: '#8b5e3c' }}>Профит</div>
-                <div className="text-sm font-medium" style={{ color: '#8b5e3c' }}>{money.format(materials.doors.totals.profit)}</div>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Убрали отдельную карточку дверей из хедера */}
 
-        <div className="rounded-md bg-yellow-50 px-3 py-3 border border-yellow-100">
-          <div className="text-xs uppercase tracking-wide text-yellow-700/80">Окна</div>
-          <div className="text-sm text-gray-700">S: {derived ? nf.format(derived.windows.areaM2) : '—'} м²</div>
-          {/* триггер скрыт по просьбе пользователя */}
-          {materials && (
-            <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="rounded bg-white/60 border border-yellow-100 px-2 py-1">
-                <div className="text-[11px] text-yellow-700/80">Затраты</div>
-                <div className="text-sm font-medium text-yellow-700">{money.format(materials.windows.totals.cost)}</div>
+        {/* Проёмы: разбивка по типам табами */}
+        {openingsMaterialsTotals && (
+          <div className="rounded-md bg-white px-3 py-3 border border-gray-200 col-span-1 sm:col-span-3">
+            <div className="text-xs uppercase tracking-wide text-gray-700/80 mb-2">Проёмы</div>
+            <div className="grid grid-cols-1 gap-3">
+              {/* Обычные проёмы */}
+              <div className="rounded-md border border-gray-200">
+                <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">Проёмы</div>
+                <div className="px-3 py-2 text-xs text-gray-600">Кол-во: {openingsMaterialsTotals.perType.opening.count}, Площадь: {nf.format(openingsMaterialsTotals.perType.opening.areaM2)} м²</div>
+                <OpeningsTable rows={openingsMaterialsTotals.rows.filter(r => r.type==='opening')} nf={nf} money={money} colorClass="text-gray-700" borderClass="border-gray-200" />
               </div>
-              <div className="rounded bg-white/60 border border-yellow-100 px-2 py-1">
-                <div className="text-[11px] text-yellow-700/80">Профит</div>
-                <div className="text-sm font-medium text-yellow-700">{money.format(materials.windows.totals.profit)}</div>
+              {/* Двери */}
+              <div className="rounded-md border" style={{ borderColor: '#e0cbb8' }}>
+                <div className="px-3 py-2 text-sm font-medium" style={{ backgroundColor: '#f3e8e0', borderBottom: '1px solid #e0cbb8', color: '#8b5e3c' }}>Двери</div>
+                <div className="px-3 py-2 text-xs" style={{ color: '#8b5e3c' }}>Кол-во: {openingsMaterialsTotals.perType.door.count}, Площадь: {nf.format(openingsMaterialsTotals.perType.door.areaM2)} м²</div>
+                <OpeningsTable rows={openingsMaterialsTotals.rows.filter(r => r.type==='door')} nf={nf} money={money} colorClass="" borderClass="" />
+              </div>
+              {/* Окна */}
+              <div className="rounded-md border border-yellow-100">
+                <div className="px-3 py-2 text-sm font-medium bg-yellow-50 border-b border-yellow-100 text-yellow-700/80">Окна</div>
+                <div className="px-3 py-2 text-xs text-yellow-700/80">Кол-во: {openingsMaterialsTotals.perType.window.count}, Площадь: {nf.format(openingsMaterialsTotals.perType.window.areaM2)} м²</div>
+                <OpeningsTable rows={openingsMaterialsTotals.rows.filter(r => r.type==='window')} nf={nf} money={money} colorClass="text-yellow-700" borderClass="border-yellow-100" />
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {!H && (<div className="px-4 pb-4 -mt-2 text-xs text-gray-500">Для корректного расчёта укажите высоту потолка.</div>)}
 
@@ -144,10 +229,10 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
               <div className="text-sm font-medium text-gray-900">Материалы этапа «Разметка»</div>
               <button className="text-gray-500 hover:text-gray-700" onClick={() => setShow(false)}>Закрыть</button>
             </div>
-            <div className="p-4 grid grid-cols-1 gap-4">
-              {(['rooms','doors','windows'] as const).map((key) => (
+            <div className="p-4 grid grid-cols-1 gap-4 max-h-[75vh] overflow-y-auto">
+              {(['doors','windows'] as const).map((key) => (
                 <div key={key} className="rounded-md border border-gray-200 overflow-hidden">
-                  <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">{key==='rooms'?'Комнаты':key==='doors'?'Двери':'Окна'}</div>
+                  <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">{key==='doors'?'Двери':'Окна'}</div>
                   <div className="p-2 overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="text-gray-600">
@@ -185,6 +270,53 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
                   </div>
                 </div>
               ))}
+              {roomMaterialsTotals && (
+                <div className="rounded-md border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-2 text-sm font-medium bg-gray-50 border-b border-gray-100">Комнаты</div>
+                  <div className="p-2 space-y-4 max-h-[60vh] overflow-y-auto">
+                    {Array.from(new Map(roomMaterialsTotals.list.map(r => [r.roomId, r.name])).entries()).map(([roomId, roomName]) => (
+                      <div key={roomId} className="rounded-md border border-gray-100">
+                        <div className="px-3 py-2 text-sm font-medium bg-white border-b border-gray-100">{roomName}</div>
+                        <div className="p-2 overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead className="text-gray-600">
+                              <tr>
+                                <th className="text-left p-1">Материал</th>
+                                <th className="text-left p-1">Основа</th>
+                                <th className="text-left p-1">Кол-во</th>
+                                <th className="text-left p-1">Закупка</th>
+                                <th className="text-left p-1">Реализация</th>
+                                <th className="text-left p-1">Профит</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {roomMaterialsTotals.list.filter(r => r.roomId === roomId).map((r, idx) => (
+                                <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                  <td className="p-1">{r.material}</td>
+                                  <td className="p-1">{r.basis === 'floor_m2' ? 'Площадь пола' : 'Площадь стен'}</td>
+                                  <td className="p-1">{nf.format(r.qty)}</td>
+                                  <td className="p-1">{money.format(r.cost)}</td>
+                                  <td className="p-1">{money.format(r.revenue)}</td>
+                                  <td className="p-1">{money.format(r.profit)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="rounded-md border border-gray-100">
+                      <div className="px-3 py-2 text-sm font-medium bg-white border-b border-gray-100">Итого по комнатам</div>
+                      <div className="p-2">
+                        <div className="text-xs text-gray-600">Кол-во: {nf.format(roomMaterialsTotals.totals.qty)}</div>
+                        <div className="text-xs text-gray-600">Затраты: {money.format(roomMaterialsTotals.totals.cost)}</div>
+                        <div className="text-xs text-gray-600">Реализация: {money.format(roomMaterialsTotals.totals.revenue)}</div>
+                        <div className="text-xs text-gray-600">Профит: {money.format(roomMaterialsTotals.totals.profit)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -220,6 +352,42 @@ export default function StageSummary({ projectId, currentStage }: StageSummaryPr
         </div>
       );
   }
+}
+function OpeningsTable({ rows, nf, money, colorClass, borderClass }: { rows: Array<any>; nf: Intl.NumberFormat; money: Intl.NumberFormat; colorClass?: string; borderClass?: string }) {
+  return (
+    <div className="p-2 overflow-x-auto max-h-[40vh] overflow-y-auto">
+      <table className="w-full text-xs">
+        <thead className={`text-gray-600 ${borderClass??''}`}>
+          <tr>
+            <th className="text-left p-2">Комната A</th>
+            <th className="text-left p-2">Комната B</th>
+            <th className="text-left p-2">Материал</th>
+            <th className="text-left p-2">Длина, м</th>
+            <th className="text-left p-2">Площадь, м²</th>
+            <th className="text-left p-2">Кол-во</th>
+            <th className="text-left p-2">Закупка</th>
+            <th className="text-left p-2">Реализация</th>
+            <th className="text-left p-2">Профит</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, idx) => (
+            <tr key={idx} className={idx%2===0?'bg-white':'bg-gray-50'}>
+              <td className={`p-2 ${colorClass??''}`}>{r.room1 || '-'}</td>
+              <td className={`p-2 ${colorClass??''}`}>{r.room2 || '-'}</td>
+              <td className={`p-2 ${colorClass??''}`}>{r.material}</td>
+              <td className={`p-2 ${colorClass??''}`}>{nf.format(r.lengthM ?? 0)}</td>
+              <td className={`p-2 ${colorClass??''}`}>{nf.format(r.areaM2)}</td>
+              <td className={`p-2 ${colorClass??''}`}>{nf.format(r.qty)}</td>
+              <td className={`p-2 ${colorClass??''}`}>{money.format(r.cost)}</td>
+              <td className={`p-2 ${colorClass??''}`}>{money.format(r.revenue)}</td>
+              <td className={`p-2 ${colorClass??''}`}>{money.format(r.profit)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function useMmPerPx(projectId: Id<'projects'>) {
@@ -321,7 +489,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
             {totals ? `${nf.format(totals.totalAreaM2)} м²` : <span className="text-gray-400 text-base">недоступно</span>}
           </div>
         </div>
-        <div className="rounded-md bg-amber-50 px-3 py-3 border border-amber-100">
+        {/* <div className="rounded-md bg-amber-50 px-3 py-3 border border-amber-100">
           <div className="text-xs uppercase tracking-wide text-amber-700/80">Затраты на этап</div>
           <div className="mt-1 text-2xl font-semibold text-amber-700">
             {materialsComputed ? money.format(materialsComputed.totalsRow.cost) : <span className="text-gray-400 text-base">н/д</span>}
@@ -332,7 +500,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
           <div className="mt-1 text-2xl font-semibold text-emerald-700">
             {materialsComputed ? money.format(materialsComputed.totalsRow.profit) : <span className="text-gray-400 text-base">н/д</span>}
           </div>
-        </div>
+        </div> */}
       </div>
       {!mmPerPx && (
         <div className="px-4 pb-4 -mt-2 text-xs text-gray-500">Для отображения значений в метрах выполните калибровку масштаба.</div>
@@ -462,7 +630,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
             {totals ? `${nf.format(totals.totalAreaM2)} м²` : <span className="text-gray-400 text-base">недоступно</span>}
           </div>
         </div>
-        <div className="rounded-md bg-amber-50 px-3 py-3 border border-amber-100">
+        {/* <div className="rounded-md bg-amber-50 px-3 py-3 border border-amber-100">
           <div className="text-xs uppercase tracking-wide text-amber-700/80">Затраты на этап</div>
           <div className="mt-1 text-2xl font-semibold text-amber-700">
             {materialsComputed ? money.format(materialsComputed.totalsRow.cost) : <span className="text-gray-400 text-base">н/д</span>}
@@ -473,7 +641,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
           <div className="mt-1 text-2xl font-semibold text-emerald-700">
             {materialsComputed ? money.format(materialsComputed.totalsRow.profit) : <span className="text-gray-400 text-base">н/д</span>}
           </div>
-        </div>
+        </div> */}
       </div>
       {!mmPerPx && (
         <div className="px-4 pb-4 -mt-2 text-xs text-gray-500">Для отображения значений в метрах выполните калибровку масштаба.</div>
