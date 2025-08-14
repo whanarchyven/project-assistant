@@ -369,6 +369,8 @@ export default function StageSummary({ projectId, currentStage }: StageSummaryPr
       return <InstallationSummary projectId={projectId} />;
     case 'baseboards':
       return <BaseboardsSummary projectId={projectId} />;
+    case 'electrical':
+      return <ElectricalSummary projectId={projectId} />;
     default:
       return (
         <div className="mt-3 p-3 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-600">
@@ -512,6 +514,152 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
                 </table>
               </div>
               <div className="text-xs text-gray-500 mt-3">Подсказка: для материалов «на метр» укажите единицу измерения, содержащую «м», для материалов «на угол» — единицу, содержащую «угол» (или англ. «corner»).</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ElectricalSummary({ projectId }: { projectId: Id<'projects'> }) {
+  const mmPerPx = useMmPerPx(projectId);
+  const elements = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'electrical' });
+  const projectMaterials = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'electrical' });
+  const defaultMaterials = useQuery(api.materials.listDefaults, { stageType: 'electrical' });
+  const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
+  const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
+  const [showMaterials, setShowMaterials] = useState(false);
+
+  const stats = useMemo(() => {
+    if (!elements) return undefined;
+    let spotlights = 0;
+    let bras = 0;
+    let outlets = 0;
+    let switches = 0;
+    let ledCount = 0;
+    let ledLengthM = 0;
+    const mPerPx = mmPerPx ? (mmPerPx / 1000) : null;
+    for (const el of elements) {
+      const st = (el as any).semanticType as string | undefined;
+      if (st === 'spotlight') spotlights += 1;
+      else if (st === 'bra') bras += 1;
+      else if (st === 'outlet') outlets += 1;
+      else if (st === 'switch') switches += 1;
+      else if (st === 'led') {
+        ledCount += 1;
+        const d: any = el.data ?? {};
+        if (Array.isArray(d.points) && d.points.length >= 2 && mPerPx) {
+          for (let i = 0; i < d.points.length - 1; i++) {
+            const a = d.points[i]; const b = d.points[i+1];
+            ledLengthM += Math.hypot(b.x - a.x, b.y - a.y) * mPerPx;
+          }
+        }
+      }
+    }
+    return { spotlights, bras, outlets, switches, ledCount, ledLengthM };
+  }, [elements, mmPerPx]);
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="w-6 h-6 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/></svg>
+        </div>
+        <div className="text-sm font-medium text-gray-900">Сводка этапа: Электрика</div>
+        <div className="ml-auto">
+          <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShowMaterials(true)} disabled={!stats}>Материалы</button>
+        </div>
+      </div>
+      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-5 gap-4">
+        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(14,165,233,0.08)', borderColor: 'rgba(14,165,233,0.25)' }}>
+          <div className="text-xs uppercase tracking-wide" style={{ color: '#0284c7' }}>Светильники</div>
+          <div className="mt-1 text-2xl font-semibold" style={{ color: '#0284c7' }}>{stats ? stats.spotlights : '—'}</div>
+        </div>
+        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(249,115,22,0.08)', borderColor: 'rgba(249,115,22,0.25)' }}>
+          <div className="text-xs uppercase tracking-wide" style={{ color: '#f97316' }}>Бра</div>
+          <div className="mt-1 text-2xl font-semibold" style={{ color: '#f97316' }}>{stats ? stats.bras : '—'}</div>
+        </div>
+        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(147,51,234,0.08)', borderColor: 'rgba(147,51,234,0.25)' }}>
+          <div className="text-xs uppercase tracking-wide" style={{ color: '#9333ea' }}>Розетки</div>
+          <div className="mt-1 text-2xl font-semibold" style={{ color: '#9333ea' }}>{stats ? stats.outlets : '—'}</div>
+        </div>
+        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(225,29,72,0.08)', borderColor: 'rgba(225,29,72,0.25)' }}>
+          <div className="text-xs uppercase tracking-wide" style={{ color: '#e11d48' }}>Выключатели</div>
+          <div className="mt-1 text-2xl font-semibold" style={{ color: '#e11d48' }}>{stats ? stats.switches : '—'}</div>
+        </div>
+        <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.25)' }}>
+          <div className="text-xs uppercase tracking-wide" style={{ color: '#10b981' }}>LED-ленты</div>
+          <div className="mt-1 text-sm" style={{ color: '#10b981' }}>Кол-во: <span className="font-semibold">{stats ? stats.ledCount : '—'}</span></div>
+          <div className="text-sm" style={{ color: '#10b981' }}>Длина: <span className="font-semibold">{stats ? nf.format(stats.ledLengthM) : '—'} м</span></div>
+        </div>
+      </div>
+      {showMaterials && stats && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Материалы этапа «Электрика»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowMaterials(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              {(() => {
+                const source = (projectMaterials && projectMaterials.length > 0) ? projectMaterials : (defaultMaterials ?? []);
+                const rows = source.map((row: any) => {
+                  const trig = (row.triggerType as 'spotlight'|'bra'|'led'|'outlet'|'switch'|undefined);
+                  const basisVal = trig === 'spotlight' ? (stats?.spotlights ?? 0)
+                    : trig === 'bra' ? (stats?.bras ?? 0)
+                    : trig === 'outlet' ? (stats?.outlets ?? 0)
+                    : trig === 'switch' ? (stats?.switches ?? 0)
+                    : trig === 'led' ? (stats?.ledLengthM ?? 0)
+                    : 0;
+                  const qty = (row.consumptionPerUnit ?? 0) * basisVal;
+                  const cost = qty * (row.purchasePrice ?? 0);
+                  const revenue = qty * (row.sellPrice ?? 0);
+                  const profit = revenue - cost;
+                  return { ...row, qty, cost, revenue, profit };
+                });
+                const totals = rows.reduce((a: any, x: any) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+                return (
+                  <div className="rounded-md border border-gray-200 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left p-2">Материал</th>
+                          <th className="text-left p-2">Норма</th>
+                          <th className="text-left p-2">Ед.</th>
+                          <th className="text-left p-2">Кол-во</th>
+                          <th className="text-left p-2">Закупка</th>
+                          <th className="text-left p-2">Реализация</th>
+                          <th className="text-left p-2">Профит</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((m: any, idx: number) => (
+                          <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="p-2">{m.name}</td>
+                            <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                            <td className="p-2">{m.unit || '-'}</td>
+                            <td className="p-2">{nf.format(m.qty)}</td>
+                            <td className="p-2">{money.format(m.cost)}</td>
+                            <td className="p-2">{money.format(m.revenue)}</td>
+                            <td className="p-2">{money.format(m.profit)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-sky-50 font-medium">
+                          <td className="p-2" colSpan={3}>Итого</td>
+                          <td className="p-2">{nf.format(totals.qty)}</td>
+                          <td className="p-2">{money.format(totals.cost)}</td>
+                          <td className="p-2">{money.format(totals.revenue)}</td>
+                          <td className="p-2">{money.format(totals.profit)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    {!mmPerPx && (
+                      <div className="text-xs text-gray-500 p-2">Для корректного расчёта длины LED‑лент выполните калибровку масштаба.</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

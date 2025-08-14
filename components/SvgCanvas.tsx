@@ -11,7 +11,7 @@ export interface SvgElement {
     fill: string;
     opacity: number;
   };
-  semanticType?: 'room' | 'door' | 'window';
+  semanticType?: 'room' | 'door' | 'window' | 'spotlight' | 'bra' | 'led' | 'outlet' | 'switch';
 }
 
 interface SvgCanvasProps {
@@ -21,7 +21,7 @@ interface SvgCanvasProps {
   pan: { x: number; y: number };
   elements: SvgElement[];
   onElementsChange: (elements: SvgElement[]) => void;
-  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening' | 'baseboard';
+  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening' | 'baseboard' | 'spotlight' | 'bra' | 'led_strip' | 'outlet' | 'switch';
   isDrawing: boolean;
   onDrawingStart: () => void;
   onDrawingEnd: () => void;
@@ -147,13 +147,13 @@ export default function SvgCanvas({
       const hit = findElementAtPoint(point);
       setSelectedElementId(hit ? hit.id : null);
       return;
-    } else if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard') {
+    } else if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard' || selectedTool === 'led_strip') {
       // Режим рисования многоугольника
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
       if (e.button === 0) { // Левая кнопка - добавить точку
-        // Автозамыкание для area/polygon/room/baseboard: клик рядом с первой точкой
-        if ((selectedTool === 'area' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'baseboard') && polygonPoints.length >= 2) {
+        // Автозамыкание для area/polygon/room/baseboard/led_strip: клик рядом с первой точкой
+        if ((selectedTool === 'area' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'baseboard' || selectedTool === 'led_strip') && polygonPoints.length >= 2) {
           const first = polygonPoints[0];
           const closeThreshold = 10 / (scale || 1);
           const dist = Math.hypot(point.x - first.x, point.y - first.y);
@@ -280,8 +280,71 @@ export default function SvgCanvas({
     // На этапе калибровки разрешаем рисовать только линию
     if ((calibrationMode || stageType === 'measurement') && selectedTool !== 'line') return;
     // Для многоугольника/комнаты используем отдельный режим добавления точек
-    if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'opening' || selectedTool === 'area') return;
+    if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'opening' || selectedTool === 'area' || selectedTool === 'led_strip' || selectedTool === 'baseboard') return;
     
+    // Точечные иконки электрики — добавляем сразу по клику
+    if (selectedTool === 'spotlight') {
+      const newElement: SvgElement = {
+        id: `element_${Date.now()}`,
+        type: 'circle',
+        data: { cx: point.x, cy: point.y, r: 6 },
+        style: { stroke: '#0284c7', strokeWidth: 2, fill: 'rgba(14,165,233,0.35)', opacity: 1 },
+        semanticType: 'spotlight',
+      };
+      onElementsChange([...elements, newElement]);
+      return;
+    }
+    if (selectedTool === 'bra') {
+      // Векторная иконка бра: полукруглый плафон + стойка
+      const r = 8;
+      const cx = point.x, cy = point.y;
+      const semi: Array<{x:number;y:number}> = [];
+      for (let i=0;i<=10;i++) {
+        const t = Math.PI * (i/10);
+        semi.push({ x: cx + r * Math.cos(Math.PI + t), y: cy + r * Math.sin(Math.PI + t) });
+      }
+      const shade: SvgElement = {
+        id: `element_${Date.now()}_bra1`,
+        type: 'polygon',
+        data: { points: [{x:cx-r,y:cy}, ...semi, {x:cx+r,y:cy}] },
+        style: { stroke: '#f97316', strokeWidth: 2, fill: 'rgba(249,115,22,0.25)', opacity: 1 },
+        semanticType: 'bra',
+      };
+      const arm: SvgElement = {
+        id: `element_${Date.now()}_bra2`,
+        type: 'line',
+        data: { points: [ { x: cx, y: cy }, { x: cx, y: cy + 12 } ] },
+        style: { stroke: '#f97316', strokeWidth: 2, fill: 'transparent', opacity: 1 },
+        semanticType: 'bra',
+      };
+      onElementsChange([...elements, shade, arm]);
+      return;
+    }
+    if (selectedTool === 'outlet') {
+      const w = 16, h = 12;
+      const newElement: SvgElement = {
+        id: `element_${Date.now()}`,
+        type: 'rectangle',
+        data: { x: point.x - w / 2, y: point.y - h / 2, width: w, height: h },
+        style: { stroke: '#9333ea', strokeWidth: 2, fill: 'rgba(147,51,234,0.15)', opacity: 1 },
+        semanticType: 'outlet',
+      };
+      onElementsChange([...elements, newElement]);
+      return;
+    }
+    if (selectedTool === 'switch') {
+      const s = 12;
+      const newElement: SvgElement = {
+        id: `element_${Date.now()}`,
+        type: 'rectangle',
+        data: { x: point.x - s / 2, y: point.y - s / 2, width: s, height: s },
+        style: { stroke: '#e11d48', strokeWidth: 2, fill: 'rgba(225,29,72,0.15)', opacity: 1 },
+        semanticType: 'switch',
+      };
+      onElementsChange([...elements, newElement]);
+      return;
+    }
+
     const newElement: SvgElement = {
       id: `element_${Date.now()}`,
       type: (selectedTool === 'door' || selectedTool === 'window') ? 'rectangle' : (selectedTool as any),
@@ -339,11 +402,12 @@ export default function SvgCanvas({
   }, [currentElement, elements, onElementsChange, onDrawingEnd]);
 
   const finishPolygon = useCallback(() => {
-        if (selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard') {
+        if (selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard' || selectedTool === 'led_strip') {
       if (polygonPoints.length >= 2) {
         const isArea = selectedTool === 'area';
         const isOpening = selectedTool === 'opening';
             const isBaseboard = selectedTool === 'baseboard';
+            const isLed = selectedTool === 'led_strip';
         const style = isArea
           ? {
               stroke: (stageType === 'demolition') ? '#ef4444' : '#16a34a',
@@ -352,7 +416,7 @@ export default function SvgCanvas({
               opacity: 1,
             }
           : {
-                  stroke: isOpening ? '#ef4444' : (isBaseboard ? '#a855f7' : '#16a34a'),
+                  stroke: isOpening ? '#ef4444' : (isBaseboard ? '#a855f7' : (isLed ? '#10b981' : '#16a34a')),
                   strokeWidth: isOpening ? 4 : (isBaseboard ? 3 : 2),
               fill: 'transparent',
               opacity: 1,
@@ -360,8 +424,9 @@ export default function SvgCanvas({
         const newElement: SvgElement = {
           id: `element_${Date.now()}`,
               type: isArea ? 'polygon' : 'line',
-          data: { points: polygonPoints },
+          data: { points: polygonPoints, ...(selectedTool === 'led_strip' ? { isLed: true } : {}) },
           style,
+          semanticType: isLed ? 'led' : undefined,
         };
         onElementsChange([...elements, newElement]);
         setPolygonPoints([]);
@@ -394,6 +459,8 @@ export default function SvgCanvas({
     switch (type) {
       case 'line':
         return { x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+      case 'led_strip':
+        return { points: [{ x: point.x, y: point.y }] };
       case 'rectangle':
         return { x: point.x, y: point.y, width: 0, height: 0 };
       case 'door':
@@ -720,12 +787,12 @@ export default function SvgCanvas({
       }}
       onContextMenu={(e) => {
         // если рисуем линию/многоугольник/площадь, ПКМ завершает, а не открывает меню
-        if (selectedTool === 'line' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'area' || selectedTool === 'baseboard') {
+        if (selectedTool === 'line' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'area' || selectedTool === 'baseboard' || selectedTool === 'led_strip') {
           e.preventDefault();
         }
       }}
       onDoubleClick={(e) => {
-        if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'baseboard') {
+        if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'baseboard' || selectedTool === 'led_strip') {
           e.stopPropagation();
           finishPolygon();
         }
@@ -756,16 +823,16 @@ export default function SvgCanvas({
         {currentElement && renderElement(currentElement)}
 
         {/* Точки многоугольника в процессе рисования */}
-        {(selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard') && polygonPoints.length > 0 && (
+        {(selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard' || selectedTool === 'led_strip') && polygonPoints.length > 0 && (
           <>
             {/* Линии между точками */}
             {polygonPoints.length > 1 && (
               <polyline
                 points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
-                stroke={selectedTool === 'baseboard' ? '#a855f7' : '#3b82f6'}
+                stroke={selectedTool === 'baseboard' ? '#a855f7' : (selectedTool === 'led_strip' ? '#10b981' : '#3b82f6')}
                 strokeWidth={selectedTool === 'baseboard' ? 3 : 2}
                 fill="none"
-                strokeDasharray={selectedTool === 'baseboard' ? '0,0' : '5,5'}
+                strokeDasharray={selectedTool === 'baseboard' ? '0,0' : (selectedTool === 'led_strip' ? '0,0' : '5,5')}
               />
             )}
             {/* Точки многоугольника */}

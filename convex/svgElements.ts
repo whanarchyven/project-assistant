@@ -45,7 +45,16 @@ export const getSvgElements = query({
       fill: v.string(),
       opacity: v.number(),
     }),
-    semanticType: v.optional(v.union(v.literal("room"), v.literal("door"), v.literal("window"))),
+    semanticType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window"),
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
+    )),
     order: v.number(),
   })),
   handler: async (ctx, args) => {
@@ -87,7 +96,16 @@ export const createSvgElement = mutation({
       fill: v.string(),
       opacity: v.number(),
     }),
-    semanticType: v.optional(v.union(v.literal("room"), v.literal("door"), v.literal("window"))),
+    semanticType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window"),
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
+    )),
   },
   returns: v.id("svgElements"),
   handler: async (ctx, args) => {
@@ -227,6 +245,16 @@ export const listSvgByProjectAndStage = query({
     ),
     data: v.any(),
     style: v.object({ stroke: v.string(), strokeWidth: v.number(), fill: v.string(), opacity: v.number() }),
+    semanticType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window"),
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
+    )),
   })),
   handler: async (ctx, args) => {
     const pages = await ctx.db

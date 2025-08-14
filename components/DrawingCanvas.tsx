@@ -142,6 +142,7 @@ export default function DrawingCanvas({
         type: dbEl.elementType,
         data: dbEl.data,
         style: dbEl.style,
+        semanticType: (dbEl as any).semanticType,
       }));
       console.log('Converted elements:', convertedElements);
       setElements(convertedElements);
@@ -308,7 +309,7 @@ export default function DrawingCanvas({
         elementType: elementToSave.type,
         data: elementToSave.data,
         style: elementToSave.style,
-        semanticType: (currentStage === 'markup') ? (element.semanticType ?? ((selectedTool === 'room') ? 'room' : (selectedTool === 'door') ? 'door' : (selectedTool === 'window') ? 'window' : undefined)) : undefined,
+        semanticType: ((elementToSave as any).semanticType) ?? ((currentStage === 'markup') ? (element.semanticType ?? ((selectedTool === 'room') ? 'room' : (selectedTool === 'door') ? 'door' : (selectedTool === 'window') ? 'window' : undefined)) : undefined),
       });
 
       // Если это этап разметки и мы нарисовали комнату (polygon), откроем попап для названия/типа

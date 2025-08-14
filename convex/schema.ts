@@ -87,7 +87,13 @@ export default defineSchema({
     semanticType: v.optional(v.union(
       v.literal("room"),
       v.literal("door"),
-      v.literal("window")
+      v.literal("window"),
+      // Электрика
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
     )),
     data: v.any(), // данные элемента (координаты, размеры и т.д.)
     style: v.object({
@@ -120,7 +126,13 @@ export default defineSchema({
     triggerType: v.optional(v.union(
       v.literal("room"),
       v.literal("door"),
-      v.literal("window")
+      v.literal("window"),
+      // Электрика
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
     )),
   }).index("by_owner_and_stage", ["ownerUserId", "stageType"]),
 
@@ -145,7 +157,13 @@ export default defineSchema({
     triggerType: v.optional(v.union(
       v.literal("room"),
       v.literal("door"),
-      v.literal("window")
+      v.literal("window"),
+      // Электрика
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
     )),
   }).index("by_project_and_stage", ["projectId", "stageType"]),
 

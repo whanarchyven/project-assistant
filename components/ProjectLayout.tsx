@@ -59,6 +59,7 @@ export default function ProjectLayout({
     { id: 'installation', name: 'Монтаж', description: 'Монтаж стен' },
     { id: 'markup', name: 'Разметка', description: 'Комнаты, окна и двери' },
     { id: 'baseboards', name: 'Плинтусы', description: 'Плинтусы (ломаная без замыкания)' },
+    { id: 'electrical', name: 'Электрика', description: 'Светильники, бра, LED-ленты, розетки, выключатели' },
   ];
 
   return (

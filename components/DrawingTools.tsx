@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening' | 'baseboard';
+export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening' | 'baseboard' | 'spotlight' | 'bra' | 'led_strip' | 'outlet' | 'switch';
 
 interface DrawingToolsProps {
   selectedTool: DrawingTool;
@@ -122,11 +122,66 @@ export default function DrawingTools({
   const restrictedStageToolsDemolition: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','opening'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const baseboardsTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','baseboard'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const electricalTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = [
+    // Базовые действия
+    baseTools.find(t => t.id === 'interact')!,
+    baseTools.find(t => t.id === 'select')!,
+    {
+      id: 'spotlight',
+      name: 'Светильник',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="4" className="stroke-sky-600" fill="rgba(14,165,233,0.25)" />
+        </svg>
+      ),
+    },
+    {
+      id: 'bra',
+      name: 'Бра',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="10" r="3" className="stroke-orange-600" fill="rgba(249,115,22,0.25)" />
+          <line x1="12" y1="13" x2="12" y2="17" className="stroke-orange-600" />
+        </svg>
+      ),
+    },
+    {
+      id: 'led_strip',
+      name: 'LED-лента',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <polyline points="3,18 8,14 12,16 16,12 21,15" className="stroke-emerald-600" />
+        </svg>
+      ),
+    },
+    {
+      id: 'outlet',
+      name: 'Розетка',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <rect x="6" y="7" width="12" height="10" className="stroke-purple-600" />
+          <circle cx="10" cy="12" r="1" className="stroke-purple-600" />
+          <circle cx="14" cy="12" r="1" className="stroke-purple-600" />
+        </svg>
+      ),
+    },
+    {
+      id: 'switch',
+      name: 'Выключатель',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <rect x="7" y="6" width="10" height="12" className="stroke-rose-600" />
+          <line x1="12" y1="7" x2="12" y2="18" className="stroke-rose-600" />
+        </svg>
+      ),
+    },
+  ];
   let tools = baseTools;
   if (stageType === 'installation') tools = restrictedStageToolsInstallation;
   if (stageType === 'demolition') tools = restrictedStageToolsDemolition;
   if ((stageType as unknown) === 'markup') tools = markupTools;
   if ((stageType as unknown) === 'baseboards') tools = baseboardsTools;
+  if ((stageType as unknown) === 'electrical') tools = electricalTools as any;
   if (calibrationMode || stageType === 'measurement') {
     tools = baseTools
       .filter(t => ['interact', 'line'].includes(t.id))

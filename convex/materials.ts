@@ -16,7 +16,13 @@ const stageUnion = v.union(
 const triggerUnion = v.union(
   v.literal("room"),
   v.literal("door"),
-  v.literal("window")
+  v.literal("window"),
+  // Электрика
+  v.literal("spotlight"),
+  v.literal("bra"),
+  v.literal("led"),
+  v.literal("outlet"),
+  v.literal("switch")
 );
 
 export const listDefaults = query({
