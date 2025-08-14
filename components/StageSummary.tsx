@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useMemo, useState } from 'react';
@@ -14,11 +15,11 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
   const projectMaterialsRooms = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'markup' });
   const defaultsRooms = useQuery(api.materials.listDefaults, { stageType: 'markup' });
   const rooms = useQuery(api.rooms.getRoomsWithGeometryByProject, { projectId });
-  const roomTypeMats = useQuery(api.rooms.listAllRoomTypeMaterials, {} as any);
+  const roomTypeMats = useQuery(api.rooms.listAllRoomTypeMaterials, {});
   const openings = useQuery(api.rooms.listOpeningsByProject, { projectId });
-  const matsOpening = useQuery(api.rooms.listOpeningMaterials, { openingType: 'opening' } as any);
-  const matsDoor = useQuery(api.rooms.listOpeningMaterials, { openingType: 'door' } as any);
-  const matsWindow = useQuery(api.rooms.listOpeningMaterials, { openingType: 'window' } as any);
+  const matsOpening = useQuery(api.rooms.listOpeningMaterials, { openingType: 'opening' });
+  const matsDoor = useQuery(api.rooms.listOpeningMaterials, { openingType: 'door' });
+  const matsWindow = useQuery(api.rooms.listOpeningMaterials, { openingType: 'window' });
 
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
@@ -52,13 +53,13 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
   const roomMaterialsTotals = useMemo(() => {
     if (!rooms || !roomTypeMats || !mmPerPx) return undefined;
     const mPerPx = mmPerPx / 1000;
-    const byType = new Map<string, Array<any>>();
-    for (const m of roomTypeMats) {
+    const byType = new Map<string, Array<{ roomTypeId: string; name: string; unit?: string; consumptionPerUnit: number; purchasePrice: number; sellPrice: number; basis: 'floor_m2'|'wall_m2' }>>();
+    for (const m of roomTypeMats as Array<{ roomTypeId: string; name: string; unit?: string; consumptionPerUnit: number; purchasePrice: number; sellPrice: number; basis: 'floor_m2'|'wall_m2' }>) {
       const arr = byType.get(m.roomTypeId as any) || [];
       arr.push(m);
       byType.set(m.roomTypeId as any, arr);
     }
-    const list: Array<{ roomId: string; name: string; material: string; unit?: string; qty: number; cost: number; revenue: number; profit: number; basis: string }> = [];
+    const list: Array<{ roomId: string; name: string; material: string; unit?: string; qty: number; cost: number; revenue: number; profit: number; basis: 'floor_m2'|'wall_m2' }> = [];
     let totalWallsM2 = 0;
     const roomInfo: Record<string, { name: string; floorM2: number; perimeterM: number; wallM2: number }> = {};
     for (const r of rooms) {
@@ -349,7 +350,7 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
 
 
 
-type StageId = 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
+type StageId = 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
 
 interface StageSummaryProps {
   projectId: Id<'projects'>;
@@ -366,7 +367,7 @@ export default function StageSummary({ projectId, currentStage }: StageSummaryPr
       return <DemolitionSummary projectId={projectId} />;
     case 'installation':
       return <InstallationSummary projectId={projectId} />;
-    case 'baseboards' as any:
+    case 'baseboards':
       return <BaseboardsSummary projectId={projectId} />;
     default:
       return (
@@ -376,42 +377,7 @@ export default function StageSummary({ projectId, currentStage }: StageSummaryPr
       );
   }
 }
-function OpeningsTable({ rows, nf, money, colorClass, borderClass }: { rows: Array<any>; nf: Intl.NumberFormat; money: Intl.NumberFormat; colorClass?: string; borderClass?: string }) {
-  return (
-    <div className="p-2 overflow-x-auto max-h-[40vh] overflow-y-auto">
-      <table className="w-full text-xs">
-        <thead className={`text-gray-600 ${borderClass??''}`}>
-          <tr>
-            <th className="text-left p-2">Комната A</th>
-            <th className="text-left p-2">Комната B</th>
-            <th className="text-left p-2">Материал</th>
-            <th className="text-left p-2">Длина, м</th>
-            <th className="text-left p-2">Площадь, м²</th>
-            <th className="text-left p-2">Кол-во</th>
-            <th className="text-left p-2">Закупка</th>
-            <th className="text-left p-2">Реализация</th>
-            <th className="text-left p-2">Профит</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, idx) => (
-            <tr key={idx} className={idx%2===0?'bg-white':'bg-gray-50'}>
-              <td className={`p-2 ${colorClass??''}`}>{r.room1 || '-'}</td>
-              <td className={`p-2 ${colorClass??''}`}>{r.room2 || '-'}</td>
-              <td className={`p-2 ${colorClass??''}`}>{r.material}</td>
-              <td className={`p-2 ${colorClass??''}`}>{nf.format(r.lengthM ?? 0)}</td>
-              <td className={`p-2 ${colorClass??''}`}>{nf.format(r.areaM2)}</td>
-              <td className={`p-2 ${colorClass??''}`}>{nf.format(r.qty)}</td>
-              <td className={`p-2 ${colorClass??''}`}>{money.format(r.cost)}</td>
-              <td className={`p-2 ${colorClass??''}`}>{money.format(r.revenue)}</td>
-              <td className={`p-2 ${colorClass??''}`}>{money.format(r.profit)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+// removed unused OpeningsTable
 
 function useMmPerPx(projectId: Id<'projects'>) {
   const project = useQuery(api.projects.getProject, { projectId });
@@ -545,7 +511,7 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
                   </tbody>
                 </table>
               </div>
-              <div className="text-xs text-gray-500 mt-3">Подсказка: для материалов "на метр" укажите единицу измерения, содержащую «м», для материалов "на угол" — единицу, содержащую «угол» (или англ. "corner").</div>
+              <div className="text-xs text-gray-500 mt-3">Подсказка: для материалов «на метр» укажите единицу измерения, содержащую «м», для материалов «на угол» — единицу, содержащую «угол» (или англ. «corner»).</div>
             </div>
           </div>
         </div>

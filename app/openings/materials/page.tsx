@@ -21,7 +21,7 @@ export default function OpeningMaterialsPage() {
       <div className="bg-white border rounded-lg p-4 mb-4">
         <div className="grid grid-cols-6 gap-2 mb-2">
           <input className="border rounded px-2 py-1" placeholder="Материал" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} />
-          <select className="border rounded px-2 py-1" value={form.basis} onChange={e=>setForm({...form, basis: e.target.value as any})}>
+          <select className="border rounded px-2 py-1" value={form.basis} onChange={e=>setForm({...form, basis: (e.target.value as 'opening_m2'|'per_opening')})}>
             <option value="opening_m2">Расход на 1 м² проёма</option>
             <option value="per_opening">Кол-во на 1 проём (шт/проём)</option>
           </select>
@@ -49,7 +49,7 @@ export default function OpeningMaterialsPage() {
             </tr>
           </thead>
           <tbody>
-            {(list??[]).map((m:any, idx:number)=>(
+            {(list??[]).map((m: { _id: string; name: string; basis: 'opening_m2'|'per_opening'; consumptionPerUnit: number; unit?: string; purchasePrice: number; sellPrice: number }, idx:number)=>(
               <tr key={m._id} className={idx%2===0?'bg-white':'bg-gray-50'}>
                 <td className="p-2">{m.name}</td>
                 <td className="p-2">{m.basis==='per_opening'?'На проём':'На м² проёма'}</td>

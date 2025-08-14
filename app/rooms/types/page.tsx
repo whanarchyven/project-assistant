@@ -2,14 +2,15 @@
 import React, { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 
 export default function RoomTypesPage() {
   const types = useQuery(api.rooms.listRoomTypes);
   const upsertType = useMutation(api.rooms.upsertRoomType);
   const upsertMaterial = useMutation(api.rooms.upsertRoomTypeMaterial);
   const [name, setName] = useState("");
-  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
-  const mats = useQuery(api.rooms.listRoomTypeMaterials, selectedTypeId ? { roomTypeId: selectedTypeId as any } : "skip");
+  const [selectedTypeId, setSelectedTypeId] = useState<Id<'roomTypes'> | null>(null);
+  const mats = useQuery(api.rooms.listRoomTypeMaterials, selectedTypeId ? { roomTypeId: selectedTypeId } : "skip");
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -22,7 +23,7 @@ export default function RoomTypesPage() {
           </div>
           <ul className="space-y-2">
             {(types ?? []).map(t => (
-              <li key={t._id} className={`p-2 border rounded cursor-pointer ${selectedTypeId === t._id ? 'bg-blue-50 border-blue-200' : ''}`} onClick={() => setSelectedTypeId(t._id as any)}>
+              <li key={t._id} className={`p-2 border rounded cursor-pointer ${selectedTypeId === t._id ? 'bg-blue-50 border-blue-200' : ''}`} onClick={() => setSelectedTypeId(t._id as Id<'roomTypes'>)}>
                 {t.name}
               </li>
             ))}
@@ -33,7 +34,7 @@ export default function RoomTypesPage() {
           {!selectedTypeId ? (
             <div className="text-sm text-gray-500">Выберите тип комнаты слева</div>
           ) : (
-            <TypeMaterials roomTypeId={selectedTypeId} mats={mats ?? []} onCreate={(row) => upsertMaterial({ roomTypeId: selectedTypeId as any, ...row })} />
+            <TypeMaterials mats={mats ?? []} onCreate={(row) => upsertMaterial({ roomTypeId: selectedTypeId as Id<'roomTypes'>, ...row })} />
           )}
         </div>
       </div>
@@ -41,7 +42,7 @@ export default function RoomTypesPage() {
   );
 }
 
-function TypeMaterials({ roomTypeId, mats, onCreate }: { roomTypeId: string; mats: Array<any>; onCreate: (row: any) => void }) {
+function TypeMaterials({ mats, onCreate }: { mats: Array<{ _id?: string; name: string; basis: 'floor_m2'|'wall_m2'; consumptionPerUnit: number; unit?: string; purchasePrice: number; sellPrice: number }>; onCreate: (row: { name: string; basis: 'floor_m2'|'wall_m2'; consumptionPerUnit: number; unit?: string; purchasePrice: number; sellPrice: number }) => void }) {
   const [form, setForm] = useState({ name: "", consumptionPerUnit: "", purchasePrice: "", sellPrice: "", unit: "", basis: "floor_m2" });
   return (
     <div className="space-y-3">
@@ -63,7 +64,7 @@ function TypeMaterials({ roomTypeId, mats, onCreate }: { roomTypeId: string; mat
           purchasePrice: Number(form.purchasePrice || 0),
           sellPrice: Number(form.sellPrice || 0),
           unit: form.unit || undefined,
-          basis: form.basis as any,
+           basis: form.basis as 'floor_m2'|'wall_m2',
         };
         onCreate(payload);
         setForm({ name: "", consumptionPerUnit: "", purchasePrice: "", sellPrice: "", unit: "", basis: "floor_m2" });
@@ -81,7 +82,7 @@ function TypeMaterials({ roomTypeId, mats, onCreate }: { roomTypeId: string; mat
             </tr>
           </thead>
           <tbody>
-            {mats.map((m: any, idx: number) => (
+            {mats.map((m, idx: number) => (
               <tr key={m._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                 <td className="p-2">{m.name}</td>
                 <td className="p-2">{m.basis === 'floor_m2' ? 'Площадь пола' : 'Площадь стен'}</td>

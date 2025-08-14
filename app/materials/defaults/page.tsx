@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useState } from 'react';
@@ -42,18 +43,18 @@ export default function MaterialsDefaultsPage() {
 
       {/* Табы этапов */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
-        <div className="px-4 pt-3">
+            <div className="px-4 pt-3">
           <div className="flex space-x-1 overflow-x-auto">
-            {(stages as any).map((s: StageId) => (
+            {stages.map((s: StageId) => (
               <button
                 key={s}
                 className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                   stageType === s ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
                 onClick={() => setStageType(s)}
-                title={(STAGE_META as any)[s].description}
+                title={STAGE_META[s].description}
               >
-                {(STAGE_META as any)[s].title}
+                {STAGE_META[s].title}
               </button>
             ))}
           </div>
@@ -63,8 +64,8 @@ export default function MaterialsDefaultsPage() {
         <div className="px-4 pb-3">
           <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 flex items-center justify-between">
             <div>
-              <div className="text-gray-900 font-medium">{(STAGE_META as any)[stageType].title}</div>
-              <div className="text-sm text-gray-600">{(STAGE_META as any)[stageType].description}</div>
+              <div className="text-gray-900 font-medium">{STAGE_META[stageType].title}</div>
+              <div className="text-sm text-gray-600">{STAGE_META[stageType].description}</div>
               <div className="text-sm text-gray-700 mt-1">
                 <span className="font-medium"></span>
                 {meta.binding}

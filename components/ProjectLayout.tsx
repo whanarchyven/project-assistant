@@ -102,7 +102,7 @@ export default function ProjectLayout({
             ))}
           </div>
           {projectId && (
-            <StageSummary projectId={projectId as Id<'projects'>} currentStage={currentStage as any} />
+            <StageSummary projectId={projectId as Id<'projects'>} currentStage={(currentStage as unknown) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
           )}
         </div>
       </div>

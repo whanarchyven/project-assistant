@@ -59,7 +59,7 @@ export default function SvgCanvas({
   const [polygonPoints, setPolygonPoints] = useState<{ x: number; y: number }[]>([]);
   const [hoverSegment, setHoverSegment] = useState<{ a:{x:number;y:number}; b:{x:number;y:number} } | null>(null);
   const [mousePoint, setMousePoint] = useState<{ x:number; y:number } | null>(null);
-  const [areaStartPoint, setAreaStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [areaStartPoint] = useState<{ x: number; y: number } | null>(null);
   const lastSnapRef = useRef<{ a:{x:number;y:number}; b:{x:number;y:number} } | null>(null);
   
   // Сброс незавершённых точек при смене инструмента, чтобы "Комната" не подхватывала точки "Проёма"
@@ -214,8 +214,9 @@ export default function SvgCanvas({
       const point = getSvgPoint(e.clientX, e.clientY);
       startDrawing(point);
     }
-  }, [selectedTool, getSvgPoint, polygonPoints, calibrationMode, stageType, areaStartPoint, currentElement, elements, onDrawingStart, onDrawingEnd, onElementsChange, scale, pairPickMode, hoverSegment, mousePoint, onPairWallPicked]);
+  }, [selectedTool, getSvgPoint, polygonPoints, calibrationMode, stageType, currentElement, elements, onDrawingStart, onDrawingEnd, onElementsChange, scale, pairPickMode, hoverSegment, mousePoint, onPairWallPicked]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     // Если выбран инструмент "взаимодействие", не обрабатываем события
     if (selectedTool === 'interact') {
@@ -252,6 +253,7 @@ export default function SvgCanvas({
     }
   }, [selectedTool, isDrawing, currentElement, isDragging, selectedElementId, getSvgPoint, areaStartPoint]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     // Если выбран инструмент "взаимодействие", не обрабатываем события
     if (selectedTool === 'interact') {
@@ -311,7 +313,7 @@ export default function SvgCanvas({
     
     setCurrentElement(newElement);
     onDrawingStart();
-  }, [selectedTool, onDrawingStart]);
+  }, [selectedTool, onDrawingStart, stageType]);
 
   const updateDrawing = useCallback((point: { x: number; y: number }) => {
     if (!currentElement) return;

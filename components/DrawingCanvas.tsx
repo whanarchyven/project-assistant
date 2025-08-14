@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../convex/_generated/api';
@@ -34,8 +35,7 @@ export default function DrawingCanvas({
   const [isRecalibrating, setIsRecalibrating] = useState(false);
   const [roomModalOpen, setRoomModalOpen] = useState(false);
   const [pendingRoomElement, setPendingRoomElement] = useState<{ elementId: string; x: number; y: number } | null>(null);
-  const [roomName, setRoomName] = useState("");
-  const [roomTypeId, setRoomTypeId] = useState<string>("");
+  // Убраны неиспользуемые локальные состояния имени/типа комнаты (логика перенесена в RoomCreateForm)
   const [openingModalOpen, setOpeningModalOpen] = useState(false);
   const [pendingOpening, setPendingOpening] = useState<{ elementId: string; snappedPoints: Array<{x:number;y:number}>; room1?: string; room2?: string } | null>(null);
   const [openingType, setOpeningType] = useState<'opening'|'door'|'window'>('opening');
@@ -335,7 +335,7 @@ export default function DrawingCanvas({
 
     console.log('Setting elements to:', newElements);
     setElements(newElements);
-  }, [currentPageData, currentStage, createElement, elements, isCalibrating, ensurePage, projectId, currentPage, selectedTool]);
+  }, [currentPageData, currentStage, createElement, elements, isCalibrating, ensurePage, projectId, currentPage, selectedTool, roomsOnPage]);
 
   const handleDrawingStart = useCallback(() => {
     setIsDrawing(true);
@@ -377,7 +377,7 @@ export default function DrawingCanvas({
     }
     setElements([]);
     setSelectedElementId(null);
-  }, [currentPageData, pages, currentStage, clearElements, ensurePage, projectId, currentPage]);
+  }, [currentPageData, pages, currentStage, clearElements, ensurePage, projectId, currentPage, clearOpeningsByPage]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedElementId) return;
@@ -721,7 +721,7 @@ export default function DrawingCanvas({
               projectId={projectId}
               pageId={currentPageData?._id}
               elementId={pendingRoomElement.elementId as any}
-              onCancel={() => { setRoomModalOpen(false); setPendingRoomElement(null); setRoomName(""); setRoomTypeId(""); }}
+              onCancel={() => { setRoomModalOpen(false); setPendingRoomElement(null); }}
               onSubmit={async (name: string, typeId: string) => {
                 if (!currentPageData?._id) return;
                 await createRoom({ projectId, pageId: currentPageData._id, elementId: pendingRoomElement.elementId as any, name, roomTypeId: typeId as any });
@@ -736,8 +736,6 @@ export default function DrawingCanvas({
                 });
                 setRoomModalOpen(false);
                 setPendingRoomElement(null);
-                setRoomName("");
-                setRoomTypeId("");
               }}
             />
           </div>
@@ -906,7 +904,7 @@ function RoomCreateForm({ projectId, pageId, elementId, onCancel, onSubmit }: { 
   const types = useQuery(api.rooms.listRoomTypes) || [];
   const [name, setName] = React.useState<string>("");
   const [typeId, setTypeId] = React.useState<string>(types[0]?._id ?? "");
-  React.useEffect(() => { if (!typeId && types.length > 0) setTypeId(types[0]._id as any); }, [types]);
+  React.useEffect(() => { if (!typeId && types.length > 0) setTypeId(types[0]._id as any); }, [types, typeId]);
   return (
     <form onSubmit={(e) => { e.preventDefault(); if (!name || !typeId) return; onSubmit(name, typeId); }}>
       <div className="space-y-3">
