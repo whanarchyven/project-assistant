@@ -31,10 +31,15 @@ const STAGE_META: Record<StageId, { title: string; description: string; binding:
 };
 
 export default function MaterialsDefaultsPage() {
+  const [mode, setMode] = useState<'materials'|'works'>('materials');
   const [stageType, setStageType] = useState<StageId>('demolition');
   const normalizedStage: 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials' = (stageType === 'baseboards' ? 'materials' : stageType);
-  const rows = useQuery(api.materials.listDefaults, { stageType: normalizedStage });
-  const upsert = useMutation(api.materials.upsertDefault);
+  const rowsMaterials = useQuery(api.materials.listDefaults, { stageType: normalizedStage });
+  const upsertMaterial = useMutation(api.materials.upsertDefault);
+  const rowsWorks = useQuery(api.works?.listDefaults as any, { stageType: normalizedStage } as any);
+  const upsertWork = useMutation(api.works?.upsertDefault as any);
+  const rows: any = mode === 'materials' ? rowsMaterials : (rowsWorks as any);
+  const upsert: any = mode === 'materials' ? upsertMaterial : upsertWork;
   const [triggerTab, setTriggerTab] = useState<'room'|'door'|'window'|'spotlight'|'bra'|'led'|'outlet'|'switch'>('room');
 
   const meta = STAGE_META[stageType];
@@ -43,8 +48,12 @@ export default function MaterialsDefaultsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-gray-900">Стандартные материалы</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-gray-900">{mode==='materials'?'Стандартные материалы':'Стандартные работы'}</h1>
+        <div className="flex items-center gap-2">
+          <button className={`px-3 py-1.5 text-xs rounded-md border ${mode==='materials'?'bg-blue-50 border-blue-200 text-blue-700':'bg-white border-gray-200 text-gray-700'}`} onClick={()=>setMode('materials')}>Материалы</button>
+          <button className={`px-3 py-1.5 text-xs rounded-md border ${mode==='works'?'bg-blue-50 border-blue-200 text-blue-700':'bg-white border-gray-200 text-gray-700'}`} onClick={()=>setMode('works')}>Работы</button>
+        </div>
       </div>
 
       {/* Табы этапов */}
@@ -96,10 +105,10 @@ export default function MaterialsDefaultsPage() {
               ) : (
                 stageType !== 'markup' && (
                   <button
-                    onClick={() => upsert({ stageType: normalizedStage as any, name: 'Новый материал', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, triggerType: meta.triggers ? (triggerTab as any) : undefined })}
+                    onClick={() => upsert({ stageType: normalizedStage as any, name: mode==='materials'?'Новый материал':'Новая работа', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, triggerType: meta.triggers ? (triggerTab as any) : undefined })}
                     className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
                   >
-                    + Добавить материал
+                    + Добавить {mode==='materials'?'материал':'работу'}
                   </button>
                 )
               )}

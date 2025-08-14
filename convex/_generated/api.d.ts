@@ -20,6 +20,7 @@ import type * as myFunctions from "../myFunctions.js";
 import type * as projects from "../projects.js";
 import type * as rooms from "../rooms.js";
 import type * as svgElements from "../svgElements.js";
+import type * as works from "../works.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   rooms: typeof rooms;
   svgElements: typeof svgElements;
+  works: typeof works;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

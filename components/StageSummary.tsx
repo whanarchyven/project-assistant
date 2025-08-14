@@ -16,14 +16,18 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
   const defaultsRooms = useQuery(api.materials.listDefaults, { stageType: 'markup' });
   const rooms = useQuery(api.rooms.getRoomsWithGeometryByProject, { projectId });
   const roomTypeMats = useQuery(api.rooms.listAllRoomTypeMaterials, {});
+  const roomTypeWorks = useQuery(api.rooms.listAllRoomTypeWorks as any, {} as any);
   const openings = useQuery(api.rooms.listOpeningsByProject, { projectId });
   const matsOpening = useQuery(api.rooms.listOpeningMaterials, { openingType: 'opening' });
   const matsDoor = useQuery(api.rooms.listOpeningMaterials, { openingType: 'door' });
   const matsWindow = useQuery(api.rooms.listOpeningMaterials, { openingType: 'window' });
+  const worksRoomsProject = useQuery((api as any).works?.listProjectWorks, { projectId, stageType: 'markup' } as any);
+  const worksRoomsDefaults = useQuery((api as any).works?.listDefaults, { stageType: 'markup' } as any);
 
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
   const [show, setShow] = useState(false);
+  const [showWorks, setShowWorks] = useState(false);
 
   const derived = useMemo(() => {
     if (!summary || !mmPerPx) return undefined;
@@ -191,8 +195,9 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Разметка</div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShow(true)} disabled={!materials}>Материалы</button>
+          <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!triggers}>Работы</button>
         </div>
       </div>
       <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -343,6 +348,103 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
           </div>
         </div>
       )}
+
+      {showWorks && triggers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Работы этапа «Разметка»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowWorks(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              {(() => {
+                const src = (worksRoomsProject && worksRoomsProject.length > 0) ? worksRoomsProject : (worksRoomsDefaults ?? []);
+                const listDoorsWindows = (src || []).filter((r: any) => (r.triggerType === 'door' || r.triggerType === 'window')).map((row: any) => {
+                  const trigVal = row.triggerType === 'door' ? (triggers?.doors ?? 0) : (triggers?.windows ?? 0);
+                  const qty = (row.consumptionPerUnit ?? 0) * trigVal;
+                  const cost = qty * (row.purchasePrice ?? 0);
+                  const revenue = qty * (row.sellPrice ?? 0);
+                  const profit = revenue - cost;
+                  return { ...row, qty, cost, revenue, profit };
+                });
+                // Работы по типам комнат (floor_m2 / wall_m2)
+                const worksByRoomTypes = (() => {
+                  if (!roomTypeWorks || !rooms || !mmPerPx || !H) return [] as any[];
+                  const mPerPx = mmPerPx / 1000;
+                  // Соберём для каждой комнаты floor_m2 и wall_m2 (как в roomMaterialsTotals)
+                  const roomInfo: Record<string, { floorM2: number; wallM2: number }> = {};
+                  for (const r of rooms) {
+                    let areaPx2 = 0; let perimPx = 0;
+                    const pts = r.points;
+                    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i+1)%pts.length]; perimPx += Math.hypot(b.x - a.x, b.y - a.y); areaPx2 += (a.x * b.y - b.x * a.y); }
+                    const floorM2 = Math.abs(areaPx2) / 2 * (mPerPx * mPerPx);
+                    // Стены: периметр × высота – площадь проёмов для комнаты
+                    let openingsAreaM2 = 0;
+                    // примем упрощение: отнять позже, сейчас считаем стену без вычетов
+                    const wallM2 = Math.max(0, perimPx * mPerPx * H - openingsAreaM2);
+                    roomInfo[r.roomId as any] = { floorM2, wallM2 };
+                  }
+                  const rows: any[] = [];
+                  for (const w of roomTypeWorks as any[]) {
+                    // суммируем по всем комнатам
+                    let basisSum = 0;
+                    for (const key of Object.keys(roomInfo)) {
+                      basisSum += w.basis === 'floor_m2' ? roomInfo[key].floorM2 : roomInfo[key].wallM2;
+                    }
+                    const qty = (w.consumptionPerUnit ?? 0) * basisSum;
+                    const cost = qty * (w.purchasePrice ?? 0);
+                    const revenue = qty * (w.sellPrice ?? 0);
+                    const profit = revenue - cost;
+                    rows.push({ ...w, qty, cost, revenue, profit });
+                  }
+                  return rows;
+                })();
+                const list = [...listDoorsWindows, ...worksByRoomTypes];
+                const totals = list.reduce((a: any, x: any) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+                const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+                const money = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
+                return (
+                  <div className="rounded-md border border-gray-200 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left p-2">Работа</th>
+                          <th className="text-left p-2">Норма</th>
+                          <th className="text-left p-2">Ед.</th>
+                          <th className="text-left p-2">Кол-во</th>
+                          <th className="text-left p-2">Себестоимость</th>
+                          <th className="text-left p-2">Реализация</th>
+                          <th className="text-left p-2">Профит</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {list.map((m: any, idx: number) => (
+                          <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="p-2">{m.name}</td>
+                            <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                            <td className="p-2">{m.unit || '-'}</td>
+                            <td className="p-2">{nf.format(m.qty)}</td>
+                            <td className="p-2">{money.format(m.cost)}</td>
+                            <td className="p-2">{money.format(m.revenue)}</td>
+                            <td className="p-2">{money.format(m.profit)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-gray-50 font-medium">
+                          <td className="p-2" colSpan={3}>Итого</td>
+                          <td className="p-2">{nf.format(totals.qty)}</td>
+                          <td className="p-2">{money.format(totals.cost)}</td>
+                          <td className="p-2">{money.format(totals.revenue)}</td>
+                          <td className="p-2">{money.format(totals.profit)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -394,9 +496,12 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
   const lines = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'materials' });
   const projectMaterials = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'materials' });
   const defaultMaterials = useQuery(api.materials.listDefaults, { stageType: 'materials' });
+  const projectWorks = useQuery(api.works.listProjectWorks, { projectId, stageType: 'materials' } as any);
+  const defaultWorks = useQuery(api.works.listDefaults, { stageType: 'materials' } as any);
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
   const [showMaterials, setShowMaterials] = useState(false);
+  const [showWorks, setShowWorks] = useState(false);
 
   const totals = useMemo(() => {
     if (!lines || !mmPerPx) return undefined;
@@ -442,6 +547,24 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
     return { rows, sums };
   }, [projectMaterials, defaultMaterials, totals]);
 
+  const worksComputed = useMemo(() => {
+    if (!totals) return undefined;
+    const source = (projectWorks && projectWorks.length > 0) ? projectWorks : (defaultWorks ?? []);
+    if (!source || source.length === 0) return undefined;
+    const rows = (source as any[]).map((row: any) => {
+      const unit: string = (row.unit || '').toString().toLowerCase();
+      const isCorner = unit.includes('угол') || unit.includes('corner');
+      const basisVal = isCorner ? totals.corners : totals.lengthM;
+      const qty = row.consumptionPerUnit * basisVal;
+      const cost = qty * row.purchasePrice;
+      const revenue = qty * row.sellPrice;
+      const profit = revenue - cost;
+      return { ...row, qty, cost, revenue, profit, basis: isCorner ? 'per_corner' : 'per_meter' };
+    });
+    const sums = rows.reduce((a: any, x: any) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+    return { rows, sums };
+  }, [projectWorks, defaultWorks, totals]);
+
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -452,6 +575,7 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
         <div className="ml-auto flex items-center gap-2">
           
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShowMaterials(true)} disabled={!materialsComputed}>Материалы</button>
+          <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!worksComputed}>Работы</button>
         </div>
       </div>
       <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -518,6 +642,57 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
           </div>
         </div>
       )}
+
+      {showWorks && worksComputed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Работы этапа «Плинтусы»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowWorks(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              <div className="rounded-md border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="text-left p-2">Работа</th>
+                      <th className="text-left p-2">Основа</th>
+                      <th className="text-left p-2">Норма</th>
+                      <th className="text-left p-2">Ед.</th>
+                      <th className="text-left p-2">Кол-во</th>
+                      <th className="text-left p-2">Себестоимость</th>
+                      <th className="text-left p-2">Реализация</th>
+                      <th className="text-left p-2">Профит</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {worksComputed.rows.map((m: any, idx: number) => (
+                      <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="p-2">{m.name}</td>
+                        <td className="p-2">{m.basis === 'per_corner' ? 'На угол' : 'На метр'}</td>
+                        <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                        <td className="p-2">{m.unit || '-'}</td>
+                        <td className="p-2">{nf.format(m.qty)}</td>
+                        <td className="p-2">{money.format(m.cost)}</td>
+                        <td className="p-2">{money.format(m.revenue)}</td>
+                        <td className="p-2">{money.format(m.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-purple-50 font-medium">
+                      <td className="p-2" colSpan={4}>Итого</td>
+                      <td className="p-2">{nf.format(worksComputed.sums.qty)}</td>
+                      <td className="p-2">{money.format(worksComputed.sums.cost)}</td>
+                      <td className="p-2">{money.format(worksComputed.sums.revenue)}</td>
+                      <td className="p-2">{money.format(worksComputed.sums.profit)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-xs text-gray-500 mt-3">Подсказка: для работ «на метр» укажите единицу измерения, содержащую «м», для работ «на угол» — единицу, содержащую «угол» (или англ. «corner»).</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -527,9 +702,12 @@ function ElectricalSummary({ projectId }: { projectId: Id<'projects'> }) {
   const elements = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'electrical' });
   const projectMaterials = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'electrical' });
   const defaultMaterials = useQuery(api.materials.listDefaults, { stageType: 'electrical' });
+  const projectWorks = useQuery(api.works.listProjectWorks, { projectId, stageType: 'electrical' } as any);
+  const defaultWorks = useQuery(api.works.listDefaults, { stageType: 'electrical' } as any);
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
   const [showMaterials, setShowMaterials] = useState(false);
+  const [showWorks, setShowWorks] = useState(false);
 
   const stats = useMemo(() => {
     if (!elements) return undefined;
@@ -567,8 +745,9 @@ function ElectricalSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Электрика</div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShowMaterials(true)} disabled={!stats}>Материалы</button>
+          <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!stats}>Работы</button>
         </div>
       </div>
       <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-5 gap-4">
@@ -664,6 +843,73 @@ function ElectricalSummary({ projectId }: { projectId: Id<'projects'> }) {
           </div>
         </div>
       )}
+
+      {showWorks && stats && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Работы этапа «Электрика»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowWorks(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              {(() => {
+                const source = (projectWorks && projectWorks.length > 0) ? projectWorks : (defaultWorks ?? []);
+                const rows = (source as any[]).map((row:any)=>{
+                  const t = row.triggerType as 'spotlight'|'bra'|'led'|'outlet'|'switch'|undefined;
+                  const basisVal = t==='spotlight'? (stats?.spotlights??0)
+                    : t==='bra'? (stats?.bras??0)
+                    : t==='outlet'? (stats?.outlets??0)
+                    : t==='switch'? (stats?.switches??0)
+                    : t==='led'? (stats?.ledLengthM??0) : 0;
+                  const qty = (row.consumptionPerUnit ?? 0) * basisVal;
+                  const cost = qty * (row.purchasePrice ?? 0);
+                  const revenue = qty * (row.sellPrice ?? 0);
+                  const profit = revenue - cost;
+                  return { ...row, qty, cost, revenue, profit };
+                });
+                const totals = rows.reduce((a:any,x:any)=>({ qty:a.qty+x.qty, cost:a.cost+x.cost, revenue:a.revenue+x.revenue, profit:a.profit+x.profit }), { qty:0, cost:0, revenue:0, profit:0 });
+                return (
+                  <div className="rounded-md border border-gray-200 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th className="text-left p-2">Работа</th>
+                          <th className="text-left p-2">Норма</th>
+                          <th className="text-left p-2">Ед.</th>
+                          <th className="text-left p-2">Кол-во</th>
+                          <th className="text-left p-2">Себестоимость</th>
+                          <th className="text-left p-2">Реализация</th>
+                          <th className="text-left p-2">Профит</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((m:any, idx:number)=> (
+                          <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="p-2">{m.name}</td>
+                            <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                            <td className="p-2">{m.unit || '-'}</td>
+                            <td className="p-2">{nf.format(m.qty)}</td>
+                            <td className="p-2">{money.format(m.cost)}</td>
+                            <td className="p-2">{money.format(m.revenue)}</td>
+                            <td className="p-2">{money.format(m.profit)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-sky-50 font-medium">
+                          <td className="p-2" colSpan={3}>Итого</td>
+                          <td className="p-2">{nf.format(totals.qty)}</td>
+                          <td className="p-2">{money.format(totals.cost)}</td>
+                          <td className="p-2">{money.format(totals.revenue)}</td>
+                          <td className="p-2">{money.format(totals.profit)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -694,11 +940,19 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
   const summary = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'demolition' });
   const projectMaterials = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'demolition' });
   const defaultMaterials = useQuery(api.materials.listDefaults, { stageType: 'demolition' });
+  const projectWorks = useQuery(api.works.listProjectWorks, { projectId, stageType: 'demolition' } as any);
+  const defaultWorks = useQuery(api.works.listDefaults, { stageType: 'demolition' } as any);
   const project = useQuery(api.projects.getProject, { projectId });
 
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
   const [showMaterials, setShowMaterials] = useState(false);
+  const [showWorks, setShowWorks] = useState(false);
+
+  const ceilingHeightM = useMemo(() => {
+    const raw = project?.ceilingHeight ?? null;
+    return raw != null ? (raw >= 100 ? raw / 1000 : raw) : null;
+  }, [project?.ceilingHeight]);
 
   const totals = useMemo(() => {
     if (!summary || !mmPerPx) return undefined;
@@ -711,8 +965,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
 
   const materialsComputed = useMemo(() => {
     if (!totals) return undefined;
-    const raw = project?.ceilingHeight ?? null;
-    const heightM = raw != null ? (raw >= 100 ? raw / 1000 : raw) : null; // поддержка старых значений в метрах
+    const heightM = ceilingHeightM;
     if (!heightM || heightM <= 0) return undefined;
     const source = (projectMaterials && projectMaterials.length > 0) ? projectMaterials : (defaultMaterials ?? []);
     if (source.length === 0) return undefined;
@@ -729,6 +982,24 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
     return { list, totalsRow };
   }, [projectMaterials, defaultMaterials, totals]);
 
+  const heightMComputed = ceilingHeightM; // читабельное имя
+  const worksComputed = useMemo(() => {
+    if (!totals) return undefined;
+    const heightM = heightMComputed;
+    if (!heightM || heightM <= 0) return undefined;
+    const source = (projectWorks && projectWorks.length > 0) ? projectWorks : (defaultWorks ?? []);
+    if (!source || source.length === 0) return undefined;
+    const rows = (source as any[]).map((row: any) => {
+      const qty = (row.consumptionPerUnit ?? 0) * totals.totalLengthM * heightM;
+      const cost = qty * (row.purchasePrice ?? 0);
+      const revenue = qty * (row.sellPrice ?? 0);
+      const profit = revenue - cost;
+      return { ...row, qty, cost, revenue, profit };
+    });
+    const totalsRow = rows.reduce((acc: any, x: any) => ({ qty: acc.qty + x.qty, cost: acc.cost + x.cost, revenue: acc.revenue + x.revenue, profit: acc.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+    return { rows, totalsRow };
+  }, [projectWorks, defaultWorks, totals, heightMComputed]);
+
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -736,13 +1007,20 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Демонтаж</div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button
             className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50"
             onClick={() => setShowMaterials(true)}
             disabled={!materialsComputed}
           >
             Материалы
+          </button>
+          <button
+            className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50"
+            onClick={() => setShowWorks(true)}
+            disabled={!worksComputed}
+          >
+            Работы
           </button>
         </div>
       </div>
@@ -756,7 +1034,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
         <div className="rounded-md bg-blue-50 px-3 py-3 border border-blue-100">
           <div className="text-xs uppercase tracking-wide text-blue-700/80">Суммарная площадь</div>
           <div className="mt-1 text-2xl font-semibold text-blue-700">
-            {totals ? `${nf.format(totals.totalAreaM2)} м²` : <span className="text-gray-400 text-base">недоступно</span>}
+            {totals && ceilingHeightM ? `${nf.format(totals.totalLengthM * ceilingHeightM)} м²` : <span className="text-gray-400 text-base">недоступно</span>}
           </div>
         </div>
         {/* <div className="rounded-md bg-amber-50 px-3 py-3 border border-amber-100">
@@ -827,6 +1105,55 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
           </div>
         </div>
       )}
+
+      {/* Попап с работами */}
+      {showWorks && worksComputed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Работы этапа «Демонтаж»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowWorks(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              <div className="rounded-md border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="text-left p-2">Работа</th>
+                      <th className="text-left p-2">Норма</th>
+                      <th className="text-left p-2">Ед.</th>
+                      <th className="text-left p-2">Кол-во</th>
+                      <th className="text-left p-2">Себестоимость</th>
+                      <th className="text-left p-2">Реализация</th>
+                      <th className="text-left p-2">Профит</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {worksComputed.rows.map((m: any, idx: number) => (
+                      <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="p-2">{m.name}</td>
+                        <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                        <td className="p-2">{m.unit || '-'}</td>
+                        <td className="p-2">{nf.format(m.qty)}</td>
+                        <td className="p-2">{money.format(m.cost)}</td>
+                        <td className="p-2">{money.format(m.revenue)}</td>
+                        <td className="p-2">{money.format(m.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-rose-50 font-medium">
+                      <td className="p-2" colSpan={3}>Итого</td>
+                      <td className="p-2">{nf.format(worksComputed.totalsRow.qty)}</td>
+                      <td className="p-2">{money.format(worksComputed.totalsRow.cost)}</td>
+                      <td className="p-2">{money.format(worksComputed.totalsRow.revenue)}</td>
+                      <td className="p-2">{money.format(worksComputed.totalsRow.profit)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -836,10 +1163,18 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
   const summary = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'installation' });
   const projectMaterials = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'installation' });
   const defaultMaterials = useQuery(api.materials.listDefaults, { stageType: 'installation' });
+  const projectWorks = useQuery(api.works.listProjectWorks, { projectId, stageType: 'installation' } as any);
+  const defaultWorks = useQuery(api.works.listDefaults, { stageType: 'installation' } as any);
   const project = useQuery(api.projects.getProject, { projectId });
   const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
   const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
   const [showMaterials, setShowMaterials] = useState(false);
+  const [showWorks, setShowWorks] = useState(false);
+
+  const ceilingHeightM = useMemo(() => {
+    const raw = project?.ceilingHeight ?? null;
+    return raw != null ? (raw >= 100 ? raw / 1000 : raw) : null;
+  }, [project?.ceilingHeight]);
 
   const totals = useMemo(() => {
     if (!summary || !mmPerPx) return undefined;
@@ -852,8 +1187,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
 
   const materialsComputed = useMemo(() => {
     if (!totals) return undefined;
-    const raw = project?.ceilingHeight ?? null;
-    const heightM = raw != null ? (raw >= 100 ? raw / 1000 : raw) : null;
+    const heightM = ceilingHeightM;
     if (!heightM || heightM <= 0) return undefined;
     const source = (projectMaterials && projectMaterials.length > 0) ? projectMaterials : (defaultMaterials ?? []);
     if (source.length === 0) return undefined;
@@ -868,7 +1202,26 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
       acc.qty += x.qty; acc.cost += x.cost; acc.revenue += x.revenue; acc.profit += x.profit; return acc;
     }, { qty: 0, cost: 0, revenue: 0, profit: 0 });
     return { list, totalsRow };
-  }, [projectMaterials, totals]);
+  }, [projectMaterials, totals, ceilingHeightM]);
+
+  const worksComputed = useMemo(() => {
+    if (!summary || !mmPerPx) return undefined;
+    const heightM = ceilingHeightM;
+    if (!heightM || heightM <= 0) return undefined;
+    const mPerPx = mmPerPx / 1000;
+    const totalLengthM = (summary.totalLengthPx ?? 0) * mPerPx;
+    const source = (projectWorks && projectWorks.length > 0) ? projectWorks : (defaultWorks ?? []);
+    if (!source || source.length === 0) return undefined;
+    const rows = (source as any[]).map((row: any) => {
+      const qty = (row.consumptionPerUnit ?? 0) * totalLengthM * heightM;
+      const cost = qty * (row.purchasePrice ?? 0);
+      const revenue = qty * (row.sellPrice ?? 0);
+      const profit = revenue - cost;
+      return { ...row, qty, cost, revenue, profit };
+    });
+    const totalsRow = rows.reduce((acc: any, x: any) => ({ qty: acc.qty + x.qty, cost: acc.cost + x.cost, revenue: acc.revenue + x.revenue, profit: acc.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+    return { rows, totalsRow };
+  }, [projectWorks, defaultWorks, summary, mmPerPx, ceilingHeightM]);
 
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -877,13 +1230,20 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Монтаж</div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button
             className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50"
             onClick={() => setShowMaterials(true)}
             disabled={!materialsComputed}
           >
             Материалы
+          </button>
+          <button
+            className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50"
+            onClick={() => setShowWorks(true)}
+            disabled={!worksComputed}
+          >
+            Работы
           </button>
         </div>
       </div>
@@ -897,7 +1257,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
         <div className="rounded-md bg-blue-50 px-3 py-3 border border-blue-100">
           <div className="text-xs uppercase tracking-wide text-blue-700/80">Суммарная площадь</div>
           <div className="mt-1 text-2xl font-semibold text-blue-700">
-            {totals ? `${nf.format(totals.totalAreaM2)} м²` : <span className="text-gray-400 text-base">недоступно</span>}
+            {totals && ceilingHeightM ? `${nf.format(totals.totalLengthM * ceilingHeightM)} м²` : <span className="text-gray-400 text-base">недоступно</span>}
           </div>
         </div>
         {/* <div className="rounded-md bg-amber-50 px-3 py-3 border border-amber-100">
@@ -963,6 +1323,54 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
               {totals && (
                 <div className="text-xs text-gray-500 mt-3">Расчёт основан на длине стен: {nf.format(totals.totalLengthM)} м</div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWorks && worksComputed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Работы этапа «Монтаж»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowWorks(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              <div className="rounded-md border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="text-left p-2">Работа</th>
+                      <th className="text-left p-2">Норма</th>
+                      <th className="text-left p-2">Ед.</th>
+                      <th className="text-left p-2">Кол-во</th>
+                      <th className="text-left p-2">Себестоимость</th>
+                      <th className="text-left p-2">Реализация</th>
+                      <th className="text-left p-2">Профит</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {worksComputed.rows.map((m: any, idx: number) => (
+                      <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="p-2">{m.name}</td>
+                        <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                        <td className="p-2">{m.unit || '-'}</td>
+                        <td className="p-2">{nf.format(m.qty)}</td>
+                        <td className="p-2">{money.format(m.cost)}</td>
+                        <td className="p-2">{money.format(m.revenue)}</td>
+                        <td className="p-2">{money.format(m.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-emerald-50 font-medium">
+                      <td className="p-2" colSpan={3}>Итого</td>
+                      <td className="p-2">{nf.format(worksComputed.totalsRow.qty)}</td>
+                      <td className="p-2">{money.format(worksComputed.totalsRow.cost)}</td>
+                      <td className="p-2">{money.format(worksComputed.totalsRow.revenue)}</td>
+                      <td className="p-2">{money.format(worksComputed.totalsRow.profit)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

@@ -133,6 +133,16 @@ export default function DrawingCanvas({
     }
   }, [project]);
 
+  // По умолчанию высота проёма = высота потолка
+  useEffect(() => {
+    if (openingModalOpen) {
+      const h = project?.ceilingHeight;
+      if (typeof h === 'number' && h > 0) {
+        setOpeningHeight(String(h));
+      }
+    }
+  }, [openingModalOpen, project?.ceilingHeight]);
+
   // Синхронизация элементов из базы данных
   useEffect(() => {
     if (dbElements) {
@@ -461,8 +471,22 @@ export default function DrawingCanvas({
         </div>
 
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-gray-600 flex items-center gap-2">
             Масштаб: {Math.round(scale * 100)}%
+            <button
+              onClick={() => setScale(prev => Math.max(prev / 1.2, 0.1))}
+              className="p-1 rounded border border-gray-200 hover:bg-gray-50"
+              title="Уменьшить масштаб"
+            >
+              −
+            </button>
+            <button
+              onClick={() => setScale(prev => Math.min(prev * 1.2, 5))}
+              className="p-1 rounded border border-gray-200 hover:bg-gray-50"
+              title="Увеличить масштаб"
+            >
+              +
+            </button>
           </span>
         </div>
       </div>

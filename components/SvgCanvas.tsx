@@ -176,6 +176,22 @@ export default function SvgCanvas({
             return;
           }
         }
+        // Для монтажа/демонтажа линия завершается сразу по двум кликам
+        if ((stageType === 'installation' || stageType === 'demolition') && selectedTool === 'line') {
+          const pts = [...polygonPoints, point];
+          if (pts.length === 2) {
+            const newElement: SvgElement = {
+              id: `element_${Date.now()}`,
+              type: 'line',
+              data: { points: pts },
+              style: { stroke: stageType === 'demolition' ? '#ef4444' : '#16a34a', strokeWidth: 3, fill: 'transparent', opacity: 1 },
+            };
+            onElementsChange([...elements, newElement]);
+            setPolygonPoints([]);
+            onDrawingEnd();
+            return;
+          }
+        }
         // Для проёма: проецируем клик на ближайшую грань и автозавершаем на втором клике
         if (selectedTool === 'opening') {
           const fromCache = lastSnapRef.current ? { a: lastSnapRef.current.a, b: lastSnapRef.current.b } : null;

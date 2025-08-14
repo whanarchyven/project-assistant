@@ -118,8 +118,8 @@ export default function DrawingTools({
     },
   ];
 
-  const restrictedStageToolsInstallation: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
-  const restrictedStageToolsDemolition: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const restrictedStageToolsInstallation: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','line'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const restrictedStageToolsDemolition: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','line'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','opening'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const baseboardsTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','baseboard'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const electricalTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = [

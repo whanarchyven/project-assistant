@@ -69,6 +69,54 @@ export const listRoomTypeMaterials = query({
   },
 });
 
+export const listRoomTypeWorks = query({
+  args: { roomTypeId: v.id("roomTypes") },
+  returns: v.array(v.object({
+    _id: v.id("roomTypeWorks"),
+    _creationTime: v.number(),
+    ownerUserId: v.id("users"),
+    roomTypeId: v.id("roomTypes"),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.union(v.literal('floor_m2'), v.literal('wall_m2')),
+  })),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("roomTypeWorks")
+      .withIndex("by_owner_and_room_type", (q) => q.eq("ownerUserId", userId).eq("roomTypeId", args.roomTypeId))
+      .collect();
+  },
+});
+
+export const upsertRoomTypeWork = mutation({
+  args: {
+    id: v.optional(v.id("roomTypeWorks")),
+    roomTypeId: v.id("roomTypes"),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.union(v.literal('floor_m2'), v.literal('wall_m2')),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Не авторизован");
+    if (args.id) {
+      await ctx.db.patch(args.id, { name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, basis: args.basis });
+    } else {
+      await ctx.db.insert("roomTypeWorks", { ownerUserId: userId, roomTypeId: args.roomTypeId, name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, basis: args.basis });
+    }
+    return null;
+  },
+});
+
 export const upsertRoomTypeMaterial = mutation({
   args: {
     id: v.optional(v.id("roomTypeMaterials")),
@@ -194,6 +242,30 @@ export const listAllRoomTypeMaterials = query({
   },
 });
 
+export const listAllRoomTypeWorks = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("roomTypeWorks"),
+    _creationTime: v.number(),
+    ownerUserId: v.id("users"),
+    roomTypeId: v.id("roomTypes"),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.union(v.literal('floor_m2'), v.literal('wall_m2')),
+  })),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("roomTypeWorks")
+      .withIndex("by_owner_and_room_type", (q) => q.eq("ownerUserId", userId))
+      .collect();
+  },
+});
+
 // Материалы для предустановленных проёмов (дверь/окно/проём)
 export const listOpeningMaterials = query({
   args: { openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')) },
@@ -214,6 +286,51 @@ export const listOpeningMaterials = query({
     if (!userId) return [];
     return await ctx.db.query('openingMaterials').withIndex('by_owner_and_type', (q) => q.eq('ownerUserId', userId).eq('openingType', args.openingType)).collect();
   },
+});
+
+export const listOpeningWorks = query({
+  args: { openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')) },
+  returns: v.array(v.object({
+    _id: v.id('openingWorks'),
+    _creationTime: v.number(),
+    ownerUserId: v.id('users'),
+    openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.union(v.literal('opening_m2'), v.literal('per_opening')),
+  })),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db.query('openingWorks').withIndex('by_owner_and_type', (q) => q.eq('ownerUserId', userId).eq('openingType', args.openingType)).collect();
+  },
+});
+
+export const upsertOpeningWork = mutation({
+  args: {
+    id: v.optional(v.id('openingWorks')),
+    openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.optional(v.union(v.literal('opening_m2'), v.literal('per_opening'))),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error('Не авторизован');
+    if (args.id) {
+      await ctx.db.patch(args.id, { name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, ...(args.basis ? { basis: args.basis } : {}) });
+    } else {
+      await ctx.db.insert('openingWorks', { ownerUserId: userId, openingType: args.openingType, name: args.name, consumptionPerUnit: args.consumptionPerUnit, purchasePrice: args.purchasePrice, sellPrice: args.sellPrice, unit: args.unit, basis: args.basis ?? 'opening_m2' });
+    }
+    return null;
+  }
 });
 
 export const upsertOpeningMaterial = mutation({

@@ -12,6 +12,7 @@ interface SimplePdfViewerProps {
   onPanChange?: (pan: { x: number; y: number }) => void;
   onNumPagesChange?: (numPages: number) => void;
   disableMouseEvents?: boolean;
+  controlledScale?: number;
 }
 
 export default function SimplePdfViewer({
@@ -22,6 +23,7 @@ export default function SimplePdfViewer({
   onPanChange,
   onNumPagesChange,
   disableMouseEvents = false,
+  controlledScale,
 }: SimplePdfViewerProps) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -40,6 +42,13 @@ export default function SimplePdfViewer({
       onScaleChange(scale);
     }
   }, [scale, onScaleChange]);
+
+  // При внешнем управлении масштабом синхронизируем локальное состояние
+  useEffect(() => {
+    if (typeof controlledScale === 'number' && controlledScale > 0 && controlledScale !== scale) {
+      setScale(controlledScale);
+    }
+  }, [controlledScale]);
 
   useEffect(() => {
     if (onPanChange) {

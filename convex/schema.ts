@@ -136,6 +136,36 @@ export default defineSchema({
     )),
   }).index("by_owner_and_stage", ["ownerUserId", "stageType"]),
 
+  // Дефолтные работы (труд) пользователя/команды
+  worksDefaults: defineTable({
+    ownerUserId: v.id("users"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("markup"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials")
+    ),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    triggerType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window"),
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
+    )),
+  }).index("by_owner_and_stage", ["ownerUserId", "stageType"]),
+
   // Материалы проекта (копия/переопределение дефолтов)
   projectMaterials: defineTable({
     projectId: v.id("projects"),
@@ -167,6 +197,36 @@ export default defineSchema({
     )),
   }).index("by_project_and_stage", ["projectId", "stageType"]),
 
+  // Работы проекта (копия/переопределение дефолтов)
+  projectWorks: defineTable({
+    projectId: v.id("projects"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("markup"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials")
+    ),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    triggerType: v.optional(v.union(
+      v.literal("room"),
+      v.literal("door"),
+      v.literal("window"),
+      v.literal("spotlight"),
+      v.literal("bra"),
+      v.literal("led"),
+      v.literal("outlet"),
+      v.literal("switch")
+    )),
+  }).index("by_project_and_stage", ["projectId", "stageType"]),
+
   // Типы комнат пользователя
   roomTypes: defineTable({
     ownerUserId: v.id("users"),
@@ -183,6 +243,18 @@ export default defineSchema({
     sellPrice: v.number(),
     unit: v.optional(v.string()),
     basis: v.union(v.literal('floor_m2'), v.literal('wall_m2')), // от чего считается расход
+  }).index("by_owner_and_room_type", ["ownerUserId", "roomTypeId"]),
+
+  // Работы для конкретного типа комнаты (в библиотеке типов комнат)
+  roomTypeWorks: defineTable({
+    ownerUserId: v.id("users"),
+    roomTypeId: v.id("roomTypes"),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
+    basis: v.union(v.literal('floor_m2'), v.literal('wall_m2')),
   }).index("by_owner_and_room_type", ["ownerUserId", "roomTypeId"]),
 
   // Комнаты проекта, сопоставление с элементом svg (polygon)
@@ -206,6 +278,18 @@ export default defineSchema({
     sellPrice: v.number(),
     unit: v.optional(v.string()),
     // основа расчёта: по площади проёма (м²) или фиксировано "на 1 проём"
+    basis: v.union(v.literal('opening_m2'), v.literal('per_opening')),
+  }).index("by_owner_and_type", ["ownerUserId", "openingType"]),
+
+  // Работы для предустановленных типов проёмов
+  openingWorks: defineTable({
+    ownerUserId: v.id("users"),
+    openingType: v.union(v.literal('door'), v.literal('window'), v.literal('opening')),
+    name: v.string(),
+    consumptionPerUnit: v.number(),
+    purchasePrice: v.number(),
+    sellPrice: v.number(),
+    unit: v.optional(v.string()),
     basis: v.union(v.literal('opening_m2'), v.literal('per_opening')),
   }).index("by_owner_and_type", ["ownerUserId", "openingType"]),
 
