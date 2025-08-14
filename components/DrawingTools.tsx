@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening';
+export type DrawingTool = 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening' | 'baseboard';
 
 interface DrawingToolsProps {
   selectedTool: DrawingTool;
@@ -41,6 +41,15 @@ export default function DrawingTools({
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M4 20V4h8v16" className="stroke-gray-600" />
           <path d="M12 12h8" className="stroke-gray-600" />
+        </svg>
+      ),
+    },
+    {
+      id: 'baseboard' as DrawingTool,
+      name: 'Плинтус',
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <polyline points="3,18 8,14 12,16 16,12 21,15" className="stroke-purple-600" />
         </svg>
       ),
     },
@@ -112,10 +121,12 @@ export default function DrawingTools({
   const restrictedStageToolsInstallation: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const restrictedStageToolsDemolition: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','area'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   const markupTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','room','opening'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
+  const baseboardsTools: Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }> = baseTools.filter(t => ['interact','select','baseboard'].includes(t.id)) as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   let tools = baseTools;
   if (stageType === 'installation') tools = restrictedStageToolsInstallation;
   if (stageType === 'demolition') tools = restrictedStageToolsDemolition;
   if ((stageType as unknown) === 'markup') tools = markupTools;
+  if ((stageType as unknown) === 'baseboards') tools = baseboardsTools;
   if (calibrationMode || stageType === 'measurement') {
     tools = baseTools
       .filter(t => ['interact', 'line'].includes(t.id))

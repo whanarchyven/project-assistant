@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 
-type StageId = 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
+type StageId = 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials';
 
 const STAGE_META: Record<StageId, { title: string; description: string; binding: string; triggers?: Array<{ id: 'room'|'door'|'window'; name: string }> }> = {
   measurement: { title: 'Калибровка', description: 'Шаблон калибровки масштаба', binding: 'Привязка не требуется' },
@@ -16,6 +16,7 @@ const STAGE_META: Record<StageId, { title: string; description: string; binding:
     { id: 'door', name: 'Двери' },
     { id: 'window', name: 'Окна' },
   ]},
+  baseboards: { title: 'Плинтуса', description: 'Материалы для плинтусов', binding: 'Привязки: метр длины, количество углов' },
   electrical: { title: 'Электрика', description: 'Материалы для электромонтажных работ', binding: 'Привязка: будет уточнено' },
   plumbing: { title: 'Сантехника', description: 'Материалы для сантехнических работ', binding: 'Привязка: будет уточнено' },
   finishing: { title: 'Отделка', description: 'Материалы для отделочных работ', binding: 'Привязка: будет уточнено' },
@@ -24,13 +25,14 @@ const STAGE_META: Record<StageId, { title: string; description: string; binding:
 
 export default function MaterialsDefaultsPage() {
   const [stageType, setStageType] = useState<StageId>('demolition');
-  const rows = useQuery(api.materials.listDefaults, { stageType });
+  const normalizedStage: 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials' = (stageType === 'baseboards' ? 'materials' : stageType);
+  const rows = useQuery(api.materials.listDefaults, { stageType: normalizedStage });
   const upsert = useMutation(api.materials.upsertDefault);
   const [triggerTab, setTriggerTab] = useState<'room'|'door'|'window'>('room');
 
   const meta = STAGE_META[stageType];
 
-  const stages: StageId[] = ['measurement','demolition','installation','markup','electrical','plumbing','finishing','materials'];
+  const stages: StageId[] = ['measurement','demolition','installation','markup','baseboards','electrical','plumbing','finishing','materials'];
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
@@ -42,16 +44,16 @@ export default function MaterialsDefaultsPage() {
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
         <div className="px-4 pt-3">
           <div className="flex space-x-1 overflow-x-auto">
-            {stages.map((s) => (
+            {(stages as any).map((s: StageId) => (
               <button
                 key={s}
                 className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                   stageType === s ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
                 onClick={() => setStageType(s)}
-                title={STAGE_META[s].description}
+                title={(STAGE_META as any)[s].description}
               >
-                {STAGE_META[s].title}
+                {(STAGE_META as any)[s].title}
               </button>
             ))}
           </div>
@@ -61,21 +63,38 @@ export default function MaterialsDefaultsPage() {
         <div className="px-4 pb-3">
           <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 flex items-center justify-between">
             <div>
-              <div className="text-gray-900 font-medium">{meta.title}</div>
-              <div className="text-sm text-gray-600">{meta.description}</div>
+              <div className="text-gray-900 font-medium">{(STAGE_META as any)[stageType].title}</div>
+              <div className="text-sm text-gray-600">{(STAGE_META as any)[stageType].description}</div>
               <div className="text-sm text-gray-700 mt-1">
                 <span className="font-medium"></span>
                 {meta.binding}
               </div>
             </div>
-            <div>
-              {stageType !== 'markup' && (
-                <button
-                  onClick={() => upsert({ stageType, name: 'Новый материал', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, triggerType: meta.triggers ? triggerTab : undefined })}
-                  className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  + Добавить материал
-                </button>
+            <div className="flex items-center gap-2">
+              {stageType === 'baseboards' ? (
+                <>
+                  <button
+                    onClick={() => upsert({ stageType: normalizedStage as any, name: 'Новый материал (метр)', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, unit: 'м' })}
+                    className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    + На метр
+                  </button>
+                  <button
+                    onClick={() => upsert({ stageType: normalizedStage as any, name: 'Новый материал (угол)', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, unit: 'угол' })}
+                    className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    + На угол
+                  </button>
+                </>
+              ) : (
+                stageType !== 'markup' && (
+                  <button
+                    onClick={() => upsert({ stageType: normalizedStage as any, name: 'Новый материал', consumptionPerUnit: 0, purchasePrice: 0, sellPrice: 0, triggerType: meta.triggers ? (undefined as any) : undefined })}
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    + Добавить материал
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -102,6 +121,57 @@ export default function MaterialsDefaultsPage() {
               </Link>
             </div>
           </div>
+        ) : (stageType as StageId) === 'baseboards' ? (
+          <div className="px-4 pb-4">
+            <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="text-left p-2">Название</th>
+                    <th className="text-left p-2">Основа</th>
+                    <th className="text-left p-2">Норма</th>
+                    <th className="text-left p-2">Ед. измерения</th>
+                    <th className="text-left p-2">Закупка</th>
+                    <th className="text-left p-2">Реализация</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(rows ?? []).map((row: any, idx: number) => {
+                    const unit: string = (row.unit || '').toString().toLowerCase();
+                    const basis = unit.includes('угол') || unit.includes('corner') ? 'corner' : 'meter';
+                    return (
+                      <tr key={row._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="p-2 align-top">
+                          <input defaultValue={row.name} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: e.target.value, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                        </td>
+                        <td className="p-2 align-top">
+                          <select defaultValue={basis} onChange={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: e.target.value === 'corner' ? 'угол' : 'м' })} className="border rounded px-2 py-1">
+                            <option value="meter">На метр</option>
+                            <option value="corner">На угол</option>
+                          </select>
+                        </td>
+                        <td className="p-2 align-top">
+                          <input type="number" step="0.0001" defaultValue={row.consumptionPerUnit} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: parseFloat(e.target.value || '0'), purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                        </td>
+                        <td className="p-2 align-top">
+                          <input defaultValue={row.unit || ''} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: e.target.value || undefined })} className="w-full border rounded px-2 py-1" />
+                        </td>
+                        <td className="p-2 align-top">
+                          <input type="number" step="0.01" defaultValue={row.purchasePrice} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: parseFloat(e.target.value || '0'), sellPrice: row.sellPrice, unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                        </td>
+                        <td className="p-2 align-top">
+                          <input type="number" step="0.01" defaultValue={row.sellPrice} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: parseFloat(e.target.value || '0'), unit: row.unit })} className="w-full border rounded px-2 py-1" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(!rows || rows.length === 0) && (
+                    <tr><td colSpan={6} className="p-6 text-center text-gray-500">Нет материалов. Добавьте «на метр» или «на угол».</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : (
           <div className="px-4 pb-4">
             <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
@@ -116,22 +186,22 @@ export default function MaterialsDefaultsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(rows ?? []).filter(r => !meta.triggers || (r as { triggerType?: 'room'|'door'|'window' }).triggerType === triggerTab).map((row, idx) => (
+                  {(rows ?? []).filter((r: any) => !meta.triggers || (r as { triggerType?: 'room'|'door'|'window' }).triggerType === triggerTab).map((row: any, idx: number) => (
                     <tr key={row._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="p-2 align-top">
-                        <input defaultValue={row.name} onBlur={e => upsert({ id: row._id, stageType, name: e.target.value, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
+                        <input defaultValue={row.name} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: e.target.value, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
                       </td>
                       <td className="p-2 align-top">
-                        <input type="number" step="0.0001" defaultValue={row.consumptionPerUnit} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: parseFloat(e.target.value || '0'), purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
+                        <input type="number" step="0.0001" defaultValue={row.consumptionPerUnit} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: parseFloat(e.target.value || '0'), purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
                       </td>
                       <td className="p-2 align-top">
-                        <input defaultValue={row.unit || ''} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: e.target.value || undefined, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
+                        <input defaultValue={row.unit || ''} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: row.sellPrice, unit: e.target.value || undefined, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
                       </td>
                       <td className="p-2 align-top">
-                        <input type="number" step="0.01" defaultValue={row.purchasePrice} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: parseFloat(e.target.value || '0'), sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
+                        <input type="number" step="0.01" defaultValue={row.purchasePrice} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: parseFloat(e.target.value || '0'), sellPrice: row.sellPrice, unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
                       </td>
                       <td className="p-2 align-top">
-                        <input type="number" step="0.01" defaultValue={row.sellPrice} onBlur={e => upsert({ id: row._id, stageType, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: parseFloat(e.target.value || '0'), unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
+                        <input type="number" step="0.01" defaultValue={row.sellPrice} onBlur={e => upsert({ id: row._id, stageType: normalizedStage as any, name: row.name, consumptionPerUnit: row.consumptionPerUnit, purchasePrice: row.purchasePrice, sellPrice: parseFloat(e.target.value || '0'), unit: row.unit, triggerType: (row as { triggerType?: 'room'|'door'|'window' }).triggerType })} className="w-full border rounded px-2 py-1" />
                       </td>
                     </tr>
                   ))}

@@ -21,7 +21,7 @@ interface SvgCanvasProps {
   pan: { x: number; y: number };
   elements: SvgElement[];
   onElementsChange: (elements: SvgElement[]) => void;
-  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening';
+  selectedTool: 'select' | 'interact' | 'line' | 'rectangle' | 'circle' | 'text' | 'polygon' | 'room' | 'door' | 'window' | 'area' | 'opening' | 'baseboard';
   isDrawing: boolean;
   onDrawingStart: () => void;
   onDrawingEnd: () => void;
@@ -147,18 +147,32 @@ export default function SvgCanvas({
       const hit = findElementAtPoint(point);
       setSelectedElementId(hit ? hit.id : null);
       return;
-    } else if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening') {
+    } else if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard') {
       // Режим рисования многоугольника
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
       if (e.button === 0) { // Левая кнопка - добавить точку
-        // Автозамыкание для area/polygon/room: клик рядом с первой точкой
-        if ((selectedTool === 'area' || selectedTool === 'polygon' || selectedTool === 'room') && polygonPoints.length >= 2) {
+        // Автозамыкание для area/polygon/room/baseboard: клик рядом с первой точкой
+        if ((selectedTool === 'area' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'baseboard') && polygonPoints.length >= 2) {
           const first = polygonPoints[0];
           const closeThreshold = 10 / (scale || 1);
           const dist = Math.hypot(point.x - first.x, point.y - first.y);
           if (dist <= closeThreshold) {
-            finishPolygon();
+            if (selectedTool === 'baseboard') {
+              // Закрываем плинтус: соединяем конец с началом, считаем как угол
+              const closedPoints = [...polygonPoints, first];
+              const newElement: SvgElement = {
+                id: `element_${Date.now()}`,
+                type: 'line',
+                data: { points: closedPoints, isBaseboard: true, isClosed: true },
+                style: { stroke: '#a855f7', strokeWidth: 3, fill: 'transparent', opacity: 1 },
+              };
+              onElementsChange([...elements, newElement]);
+              setPolygonPoints([]);
+              onDrawingEnd();
+            } else {
+              finishPolygon();
+            }
             return;
           }
         }
@@ -323,10 +337,11 @@ export default function SvgCanvas({
   }, [currentElement, elements, onElementsChange, onDrawingEnd]);
 
   const finishPolygon = useCallback(() => {
-        if (selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening') {
+        if (selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard') {
       if (polygonPoints.length >= 2) {
         const isArea = selectedTool === 'area';
         const isOpening = selectedTool === 'opening';
+            const isBaseboard = selectedTool === 'baseboard';
         const style = isArea
           ? {
               stroke: (stageType === 'demolition') ? '#ef4444' : '#16a34a',
@@ -335,8 +350,8 @@ export default function SvgCanvas({
               opacity: 1,
             }
           : {
-              stroke: isOpening ? '#ef4444' : '#16a34a',
-              strokeWidth: isOpening ? 4 : 2,
+                  stroke: isOpening ? '#ef4444' : (isBaseboard ? '#a855f7' : '#16a34a'),
+                  strokeWidth: isOpening ? 4 : (isBaseboard ? 3 : 2),
               fill: 'transparent',
               opacity: 1,
             };
@@ -703,12 +718,12 @@ export default function SvgCanvas({
       }}
       onContextMenu={(e) => {
         // если рисуем линию/многоугольник/площадь, ПКМ завершает, а не открывает меню
-        if (selectedTool === 'line' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'area') {
+        if (selectedTool === 'line' || selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'area' || selectedTool === 'baseboard') {
           e.preventDefault();
         }
       }}
       onDoubleClick={(e) => {
-        if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area') {
+        if (selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'baseboard') {
           e.stopPropagation();
           finishPolygon();
         }
@@ -739,16 +754,16 @@ export default function SvgCanvas({
         {currentElement && renderElement(currentElement)}
 
         {/* Точки многоугольника в процессе рисования */}
-        {(selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening') && polygonPoints.length > 0 && (
+        {(selectedTool === 'polygon' || selectedTool === 'room' || selectedTool === 'line' || selectedTool === 'area' || selectedTool === 'opening' || selectedTool === 'baseboard') && polygonPoints.length > 0 && (
           <>
             {/* Линии между точками */}
             {polygonPoints.length > 1 && (
               <polyline
                 points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
-                stroke="#3b82f6"
-                strokeWidth={2}
+                stroke={selectedTool === 'baseboard' ? '#a855f7' : '#3b82f6'}
+                strokeWidth={selectedTool === 'baseboard' ? 3 : 2}
                 fill="none"
-                strokeDasharray="5,5"
+                strokeDasharray={selectedTool === 'baseboard' ? '0,0' : '5,5'}
               />
             )}
             {/* Точки многоугольника */}

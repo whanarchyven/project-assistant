@@ -188,6 +188,63 @@ export const clearSvgElements = mutation({
   },
 });
 
+// Список SVG элементов по всему проекту для указанного этапа
+export const listSvgByProjectAndStage = query({
+  args: {
+    projectId: v.id("projects"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("markup"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials"),
+    ),
+  },
+  returns: v.array(v.object({
+    _id: v.id("svgElements"),
+    _creationTime: v.number(),
+    pageId: v.id("pages"),
+    stageType: v.union(
+      v.literal("measurement"),
+      v.literal("installation"),
+      v.literal("demolition"),
+      v.literal("markup"),
+      v.literal("electrical"),
+      v.literal("plumbing"),
+      v.literal("finishing"),
+      v.literal("materials")
+    ),
+    order: v.number(),
+    elementType: v.union(
+      v.literal("line"),
+      v.literal("rectangle"),
+      v.literal("circle"),
+      v.literal("text"),
+      v.literal("polygon")
+    ),
+    data: v.any(),
+    style: v.object({ stroke: v.string(), strokeWidth: v.number(), fill: v.string(), opacity: v.number() }),
+  })),
+  handler: async (ctx, args) => {
+    const pages = await ctx.db
+      .query("pages")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    const out: any[] = [];
+    for (const p of pages) {
+      const elements = await ctx.db
+        .query("svgElements")
+        .withIndex("by_page_and_stage", (q) => q.eq("pageId", p._id).eq("stageType", args.stageType as any))
+        .collect();
+      out.push(...elements);
+    }
+    return out;
+  },
+});
+
 // Обновить порядок элементов
 export const reorderSvgElements = mutation({
   args: {

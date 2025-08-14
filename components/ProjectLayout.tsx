@@ -58,6 +58,7 @@ export default function ProjectLayout({
     { id: 'demolition', name: 'Демонтаж', description: 'Демонтажные работы' },
     { id: 'installation', name: 'Монтаж', description: 'Монтаж стен' },
     { id: 'markup', name: 'Разметка', description: 'Комнаты, окна и двери' },
+    { id: 'baseboards', name: 'Плинтусы', description: 'Плинтусы (ломаная без замыкания)' },
   ];
 
   return (
@@ -101,7 +102,7 @@ export default function ProjectLayout({
             ))}
           </div>
           {projectId && (
-            <StageSummary projectId={projectId as Id<'projects'>} currentStage={currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
+            <StageSummary projectId={projectId as Id<'projects'>} currentStage={currentStage as any} />
           )}
         </div>
       </div>

@@ -61,7 +61,7 @@ export default function DrawingCanvas({
     api.svgElements.getSvgElements,
     currentPageData ? {
       pageId: currentPageData._id,
-      stageType: currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
+              stageType: (currentStage === 'baseboards' ? 'materials' : currentStage) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
     } : "skip"
   );
 
@@ -294,9 +294,17 @@ export default function DrawingCanvas({
         }
       }
 
+      // Доп. маркировка плинтусов в данных
+      if (currentStage === 'baseboards' && elementToSave.type === 'line' && Array.isArray((elementToSave as any).data?.points)) {
+        elementToSave = {
+          ...elementToSave,
+          data: { ...(elementToSave as any).data, isBaseboard: true },
+          style: { ...(elementToSave as any).style, stroke: '#a855f7', strokeWidth: 3 },
+        } as any;
+      }
       const createdId = await createElement({
         pageId,
-        stageType: currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
+        stageType: (currentStage === 'baseboards' ? 'materials' : currentStage) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
         elementType: elementToSave.type,
         data: elementToSave.data,
         style: elementToSave.style,
@@ -356,11 +364,11 @@ export default function DrawingCanvas({
       pageId = await ensurePage({ projectId, pageNumber: currentPage });
     }
     console.log('Clearing elements for page:', pageId);
-    try {
-      await clearElements({
-        pageId,
-        stageType: currentStage as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
-      });
+      try {
+        await clearElements({
+          pageId,
+          stageType: (currentStage === 'baseboards' ? 'materials' : currentStage) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'electrical' | 'plumbing' | 'finishing' | 'materials',
+        });
       // Дополнительно чистим проёмы (относятся к разметке страницы)
       await clearOpeningsByPage({ pageId });
       console.log('Clear elements mutation completed');

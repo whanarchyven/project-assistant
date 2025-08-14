@@ -366,6 +366,8 @@ export default function StageSummary({ projectId, currentStage }: StageSummaryPr
       return <DemolitionSummary projectId={projectId} />;
     case 'installation':
       return <InstallationSummary projectId={projectId} />;
+    case 'baseboards' as any:
+      return <BaseboardsSummary projectId={projectId} />;
     default:
       return (
         <div className="mt-3 p-3 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-600">
@@ -417,6 +419,139 @@ function useMmPerPx(projectId: Id<'projects'>) {
     if (!project || !project.scale || project.scale.pixelLength === 0) return null;
     return project.scale.knownLength / project.scale.pixelLength;
   }, [project]);
+}
+
+function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
+  const mmPerPx = useMmPerPx(projectId);
+  const lines = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'materials' });
+  const projectMaterials = useQuery(api.materials.listProjectMaterials, { projectId, stageType: 'materials' });
+  const defaultMaterials = useQuery(api.materials.listDefaults, { stageType: 'materials' });
+  const nf = useMemo(() => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }), []);
+  const money = useMemo(() => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }), []);
+  const [showMaterials, setShowMaterials] = useState(false);
+
+  const totals = useMemo(() => {
+    if (!lines || !mmPerPx) return undefined;
+    const mPerPx = mmPerPx / 1000;
+    let lengthM = 0;
+    let corners = 0;
+    for (const el of lines) {
+      if (el.elementType !== 'line') continue;
+      const d: any = el.data ?? {};
+      if (d.isBaseboard && Array.isArray(d.points) && d.points.length >= 2) {
+        for (let i = 0; i < d.points.length - 1; i++) {
+          const a = d.points[i]; const b = d.points[i+1];
+          lengthM += Math.hypot(b.x - a.x, b.y - a.y) * mPerPx;
+        }
+        const pts = d.points as Array<{x:number;y:number}>;
+        const n = pts.length;
+        const isClosed = !!d.isClosed || (n >= 2 && Math.hypot(pts[0].x - pts[n-1].x, pts[0].y - pts[n-1].y) < 1e-6);
+        if (isClosed) {
+          const uniqueVertices = n > 1 ? n - 1 : 0;
+          corners += uniqueVertices;
+        } else {
+          corners += Math.max(0, n - 2);
+        }
+      }
+    }
+    return { lengthM, corners };
+  }, [lines, mmPerPx]);
+
+  const materialsComputed = useMemo(() => {
+    if (!totals) return undefined;
+    const source = (projectMaterials && projectMaterials.length > 0) ? projectMaterials : (defaultMaterials ?? []);
+    if (!source || source.length === 0) return undefined;
+    const rows = source.map((row: any) => {
+      const unit: string = (row.unit || '').toString().toLowerCase();
+      const isCorner = unit.includes('угол') || unit.includes('corner');
+      const qty = row.consumptionPerUnit * (isCorner ? totals.corners : totals.lengthM);
+      const cost = qty * row.purchasePrice;
+      const revenue = qty * row.sellPrice;
+      const profit = revenue - cost;
+      return { ...row, qty, cost, revenue, profit, basis: isCorner ? 'per_corner' : 'per_meter' };
+    });
+    const sums = rows.reduce((a: any, x: any) => ({ qty: a.qty + x.qty, cost: a.cost + x.cost, revenue: a.revenue + x.revenue, profit: a.profit + x.profit }), { qty: 0, cost: 0, revenue: 0, profit: 0 });
+    return { rows, sums };
+  }, [projectMaterials, defaultMaterials, totals]);
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,18 8,14 12,16 16,12 21,15"/></svg>
+        </div>
+        <div className="text-sm font-medium text-gray-900">Сводка этапа: Плинтусы</div>
+        <div className="ml-auto flex items-center gap-2">
+          
+          <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShowMaterials(true)} disabled={!materialsComputed}>Материалы</button>
+        </div>
+      </div>
+      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="rounded-md bg-purple-50 px-3 py-3 border border-purple-100">
+          <div className="text-xs uppercase tracking-wide text-purple-700/80">Суммарная длина</div>
+          <div className="mt-1 text-2xl font-semibold text-purple-700">{totals ? nf.format(totals.lengthM) : '—'} м</div>
+        </div>
+        <div className="rounded-md bg-purple-50 px-3 py-3 border border-purple-100">
+          <div className="text-xs uppercase tracking-wide text-purple-700/80">Количество углов</div>
+          <div className="mt-1 text-2xl font-semibold text-purple-700">{totals ? totals.corners : '—'}</div>
+        </div>
+      </div>
+      {!mmPerPx && (
+        <div className="px-4 pb-4 -mt-2 text-xs text-gray-500">Для отображения значений в метрах выполните калибровку масштаба.</div>
+      )}
+
+      {showMaterials && materialsComputed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="text-sm font-medium text-gray-900">Материалы этапа «Плинтусы»</div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowMaterials(false)}>Закрыть</button>
+            </div>
+            <div className="p-4">
+              <div className="rounded-md border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="text-left p-2">Материал</th>
+                      <th className="text-left p-2">Основа</th>
+                      <th className="text-left p-2">Норма</th>
+                      <th className="text-left p-2">Ед.</th>
+                      <th className="text-left p-2">Кол-во</th>
+                      <th className="text-left p-2">Закупка</th>
+                      <th className="text-left p-2">Реализация</th>
+                      <th className="text-left p-2">Профит</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materialsComputed.rows.map((m: any, idx: number) => (
+                      <tr key={m._id ?? idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="p-2">{m.name}</td>
+                        <td className="p-2">{m.basis === 'per_corner' ? 'На угол' : 'На метр'}</td>
+                        <td className="p-2">{nf.format(m.consumptionPerUnit)}</td>
+                        <td className="p-2">{m.unit || '-'}</td>
+                        <td className="p-2">{nf.format(m.qty)}</td>
+                        <td className="p-2">{money.format(m.cost)}</td>
+                        <td className="p-2">{money.format(m.revenue)}</td>
+                        <td className="p-2">{money.format(m.profit)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-purple-50 font-medium">
+                      <td className="p-2" colSpan={4}>Итого</td>
+                      <td className="p-2">{nf.format(materialsComputed.sums.qty)}</td>
+                      <td className="p-2">{money.format(materialsComputed.sums.cost)}</td>
+                      <td className="p-2">{money.format(materialsComputed.sums.revenue)}</td>
+                      <td className="p-2">{money.format(materialsComputed.sums.profit)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-xs text-gray-500 mt-3">Подсказка: для материалов "на метр" укажите единицу измерения, содержащую «м», для материалов "на угол" — единицу, содержащую «угол» (или англ. "corner").</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CalibrationSummary({ projectId }: { projectId: Id<'projects'> }) {
