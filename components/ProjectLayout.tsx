@@ -6,6 +6,7 @@ import StageSummary from './StageSummary';
 import { useConvexAuth } from 'convex/react';
 // import { useAuthActions } from '@convex-dev/auth/react';
 import { useRouter } from 'next/navigation';
+import ExportExcelButton from './ExportExcelButton';
 
 interface ProjectLayoutProps {
   children: React.ReactNode;
@@ -78,7 +79,11 @@ export default function ProjectLayout({
               </div>
             )}
           </div>
-          
+          {projectId && (
+            <div className="flex-shrink-0">
+              <ExportExcelButton projectId={projectId as Id<'projects'>} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -102,10 +107,12 @@ export default function ProjectLayout({
               </button>
             ))}
           </div>
-          {projectId && (
-            <StageSummary projectId={projectId as Id<'projects'>} currentStage={(currentStage as unknown) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
-          )}
         </div>
+        {projectId && (
+          <div className="px-6 py-2">
+            <StageSummary projectId={projectId as Id<'projects'>} currentStage={(currentStage as unknown) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
+          </div>
+        )}
       </div>
 
       {/* Основной контент (прокручиваемый) */}

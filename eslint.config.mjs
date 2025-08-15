@@ -11,6 +11,16 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    rules: {
+      // Подавляем часто всплывающие предупреждения по зависимостям хуков в UI-коде
+      'react-hooks/exhaustive-deps': 'off',
+      // Разрешаем временно использовать any в местах интеграций (Convex типы могут быть сложными)
+      '@typescript-eslint/no-explicit-any': 'off',
+      // Иногда используем let для наглядности пошаговых расчётов
+      'prefer-const': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;

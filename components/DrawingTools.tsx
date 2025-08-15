@@ -181,7 +181,7 @@ export default function DrawingTools({
   if (stageType === 'demolition') tools = restrictedStageToolsDemolition;
   if ((stageType as unknown) === 'markup') tools = markupTools;
   if ((stageType as unknown) === 'baseboards') tools = baseboardsTools;
-  if ((stageType as unknown) === 'electrical') tools = electricalTools as any;
+  if ((stageType as unknown) === 'electrical') tools = electricalTools as Array<{ id: DrawingTool; name: string; icon: React.JSX.Element }>;
   if (calibrationMode || stageType === 'measurement') {
     tools = baseTools
       .filter(t => ['interact', 'line'].includes(t.id))

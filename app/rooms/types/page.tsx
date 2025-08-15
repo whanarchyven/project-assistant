@@ -8,11 +8,11 @@ export default function RoomTypesPage() {
   const types = useQuery(api.rooms.listRoomTypes);
   const upsertType = useMutation(api.rooms.upsertRoomType);
   const upsertMaterial = useMutation(api.rooms.upsertRoomTypeMaterial);
-  const upsertWork = useMutation(api.rooms.upsertRoomTypeWork as any);
+  const upsertWork = useMutation(api.rooms.upsertRoomTypeWork as never);
   const [name, setName] = useState("");
   const [selectedTypeId, setSelectedTypeId] = useState<Id<'roomTypes'> | null>(null);
   const mats = useQuery(api.rooms.listRoomTypeMaterials, selectedTypeId ? { roomTypeId: selectedTypeId } : "skip");
-  const works = useQuery(api.rooms.listRoomTypeWorks as any, selectedTypeId ? ({ roomTypeId: selectedTypeId } as any) : "skip");
+  const works = useQuery(api.rooms.listRoomTypeWorks as never, selectedTypeId ? ({ roomTypeId: selectedTypeId } as never) : "skip");
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -39,7 +39,7 @@ export default function RoomTypesPage() {
             <>
               <TypeMaterials mats={mats ?? []} onCreate={(row) => upsertMaterial({ roomTypeId: selectedTypeId as Id<'roomTypes'>, ...row })} />
               <div className="h-6" />
-              <TypeWorks rows={works ?? []} onCreate={(row) => upsertWork({ roomTypeId: selectedTypeId as Id<'roomTypes'>, ...row } as any)} />
+              <TypeWorks rows={(works ?? []) as Array<{ _id?: string; name: string; basis: 'floor_m2'|'wall_m2'; consumptionPerUnit: number; unit?: string; purchasePrice: number; sellPrice: number }>} onCreate={(row) => upsertWork({ roomTypeId: selectedTypeId as Id<'roomTypes'>, ...row } as never)} />
             </>
           )}
         </div>

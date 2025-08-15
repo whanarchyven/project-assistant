@@ -23,6 +23,7 @@ export default function DrawingCanvas({
 }: DrawingCanvasProps) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [resetTrigger, setResetTrigger] = useState(0);
   const [numPages, setNumPages] = useState(0);
   const [elements, setElements] = useState<SvgElement[]>([]);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('select');
@@ -223,8 +224,8 @@ export default function DrawingCanvas({
       }
     }
     
-    // Если не в режиме калибровки, но пользователь рисует линию — запускаем перекалибровку
-    if (!isCalibrating && selectedTool === 'line' && newElementsToCreate.length > 0) {
+    // Перекалибровка только на этапе измерений
+    if (!isCalibrating && currentStage === 'measurement' && selectedTool === 'line' && newElementsToCreate.length > 0) {
       const lastTemp = newElementsToCreate[newElementsToCreate.length - 1];
       const px = computeLinePixels(lastTemp.data);
       if (px && px > 0) {
@@ -487,6 +488,13 @@ export default function DrawingCanvas({
             >
               +
             </button>
+            <button
+              onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); setResetTrigger(t => t + 1); }}
+              className="p-1 rounded border border-gray-200 hover:bg-gray-50"
+              title="Сброс масштаба"
+            >
+              ⟲
+            </button>
           </span>
         </div>
       </div>
@@ -509,6 +517,8 @@ export default function DrawingCanvas({
               onPanChange={handlePanChange}
               onNumPagesChange={handleNumPagesChange}
               disableMouseEvents={false}
+              controlledScale={scale}
+              resetTrigger={resetTrigger}
             />
           </div>
 

@@ -79,7 +79,7 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
       }
       const floorM2 = Math.abs(areaPx2) / 2 * (mPerPx * mPerPx);
       // Вычитаем площадь проёмов на стенах комнаты (пока просто суммарно по roomId1/2)
-      let openingsAreaM2 = 0;
+      let openingsAreaM2 = 0 as number;
       if (openings && H) {
         const rel = (openings as any[]).filter(o => o.roomId1 === (r.roomId as any) || o.roomId2 === (r.roomId as any));
         for (const op of rel) {

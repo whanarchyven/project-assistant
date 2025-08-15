@@ -13,6 +13,7 @@ interface SimplePdfViewerProps {
   onNumPagesChange?: (numPages: number) => void;
   disableMouseEvents?: boolean;
   controlledScale?: number;
+  resetTrigger?: number;
 }
 
 export default function SimplePdfViewer({
@@ -24,6 +25,7 @@ export default function SimplePdfViewer({
   onNumPagesChange,
   disableMouseEvents = false,
   controlledScale,
+  resetTrigger,
 }: SimplePdfViewerProps) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -38,9 +40,7 @@ export default function SimplePdfViewer({
   const project = useQuery(api.projects.getProjectWithPdfUrl, { projectId });
 
   useEffect(() => {
-    if (onScaleChange) {
-      onScaleChange(scale);
-    }
+    if (onScaleChange) onScaleChange(scale);
   }, [scale, onScaleChange]);
 
   // При внешнем управлении масштабом синхронизируем локальное состояние
@@ -48,13 +48,22 @@ export default function SimplePdfViewer({
     if (typeof controlledScale === 'number' && controlledScale > 0 && controlledScale !== scale) {
       setScale(controlledScale);
     }
-  }, [controlledScale]);
+  }, [controlledScale, scale]);
 
   useEffect(() => {
     if (onPanChange) {
       onPanChange(pan);
     }
   }, [pan, onPanChange]);
+
+  // Сброс по внешнему триггеру
+  useEffect(() => {
+    if (!resetTrigger) return;
+    setPan({ x: 0, y: 0 });
+    if (typeof controlledScale !== 'number') {
+      setScale(1);
+    }
+  }, [resetTrigger]);
 
   // Получаем URL для PDF из проекта
   const pdfUrl = project?.pdfUrl;
@@ -98,10 +107,20 @@ export default function SimplePdfViewer({
     e.preventDefault();
     
     if (e.ctrlKey || e.metaKey) {
-      // Масштабирование
+      // Масштабирование относительно курсора
+      const rect = containerRef.current?.getBoundingClientRect();
+      const cursorX = rect ? (e.clientX - rect.left) : 0;
+      const cursorY = rect ? (e.clientY - rect.top) : 0;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newScale = Math.max(0.1, Math.min(5, scale * delta));
-      setScale(newScale);
+      const nextScale = Math.max(0.1, Math.min(5, scale * delta));
+      const ratio = nextScale / (scale || 1);
+      // Сдвигаем pan так, чтобы точка под курсором оставалась на месте
+      const nextPan = {
+        x: cursorX * (1 - ratio) + ratio * pan.x,
+        y: cursorY * (1 - ratio) + ratio * pan.y,
+      };
+      setPan(nextPan);
+      setScale(nextScale);
     } else {
       // Панорамирование
       setPan(prev => ({

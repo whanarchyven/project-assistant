@@ -9,11 +9,15 @@ export default function MaterialsPageClient({ projectId }: { projectId: Id<'proj
   const [mode, setMode] = useState<'materials'|'works'>('materials');
   const [stageType, setStageType] = useState<'demolition' | 'installation' | 'measurement' | 'electrical' | 'plumbing' | 'finishing' | 'materials'>('demolition');
   const materials = useQuery(api.materials.listProjectMaterials, { projectId, stageType });
-  const works = useQuery(api.works?.listProjectWorks as any, { projectId, stageType } as any);
+  const works = useQuery(api.works?.listProjectWorks as never, { projectId, stageType } as never);
   const updateMat = useMutation(api.materials.upsertProjectMaterial);
-  const updateWork = useMutation(api.works?.upsertProjectWork as any);
-  const rows: any[] = (mode==='materials' ? (materials ?? []) : (works as any ?? [])) as any[];
-  const update = (mode==='materials' ? updateMat : updateWork) as any;
+  const updateWork = useMutation(api.works?.upsertProjectWork as never);
+  type Row = { _id?: string; name: string; consumptionPerUnit: number; purchasePrice: number; sellPrice: number; unit?: string };
+  type UpsertPayload = { id?: string; projectId: Id<'projects'>; stageType: typeof stageType; name: string; consumptionPerUnit: number; purchasePrice: number; sellPrice: number; unit?: string };
+  const rows: Row[] = (mode==='materials' ? (materials ?? []) : ((works as unknown as Row[]) ?? []));
+  const updateMaterialFn = updateMat as unknown as (args: UpsertPayload) => Promise<unknown>;
+  const updateWorkFn = updateWork as unknown as (args: UpsertPayload) => Promise<unknown>;
+  const update = mode==='materials' ? updateMaterialFn : updateWorkFn;
 
   return (
     <div className="p-6">

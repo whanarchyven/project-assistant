@@ -247,6 +247,12 @@ export default function SvgCanvas({
       setHoverSegment(best ? { a: best.a, b: best.b } : null);
     }
 
+    // Предпросмотр отрезка для монтажа/демонтажа: от первой точки до курсора
+    if ((stageType === 'installation' || stageType === 'demolition') && selectedTool === 'line') {
+      const point = getSvgPoint(e.clientX, e.clientY);
+      setMousePoint(point);
+    }
+
     if (selectedTool === 'area' && areaStartPoint && currentElement) {
       e.stopPropagation();
       const point = getSvgPoint(e.clientX, e.clientY);
@@ -849,6 +855,18 @@ export default function SvgCanvas({
                 strokeWidth={selectedTool === 'baseboard' ? 3 : 2}
                 fill="none"
                 strokeDasharray={selectedTool === 'baseboard' ? '0,0' : (selectedTool === 'led_strip' ? '0,0' : '5,5')}
+              />
+            )}
+            {/* Предпросмотр второго сегмента для монтажа/демонтажа */}
+            {(selectedTool === 'line' && (stageType === 'installation' || stageType === 'demolition') && polygonPoints.length === 1 && mousePoint) && (
+              <line
+                x1={polygonPoints[0].x}
+                y1={polygonPoints[0].y}
+                x2={mousePoint.x}
+                y2={mousePoint.y}
+                stroke={stageType === 'demolition' ? '#ef4444' : '#16a34a'}
+                strokeWidth={3}
+                strokeDasharray="4,4"
               />
             )}
             {/* Точки многоугольника */}

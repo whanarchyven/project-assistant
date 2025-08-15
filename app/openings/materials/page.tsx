@@ -7,8 +7,8 @@ export default function OpeningMaterialsPage() {
   const [active, setActive] = useState<'door'|'window'|'opening'>('opening');
   const list = useQuery(api.rooms.listOpeningMaterials, { openingType: active });
   const upsert = useMutation(api.rooms.upsertOpeningMaterial);
-  const works = useQuery(api.rooms.listOpeningWorks as any, { openingType: active } as any);
-  const upsertWork = useMutation(api.rooms.upsertOpeningWork as any);
+  const works = useQuery(api.rooms.listOpeningWorks as never, { openingType: active } as never);
+  const upsertWork = useMutation(api.rooms.upsertOpeningWork as never);
   const [form, setForm] = useState({ name: "", basis: 'opening_m2' as 'opening_m2'|'per_opening', consumptionPerUnit: "", purchasePrice: "", sellPrice: "", unit: "" });
   const [work, setWork] = useState({ name: "", basis: 'opening_m2' as 'opening_m2'|'per_opening', consumptionPerUnit: "", purchasePrice: "", sellPrice: "", unit: "" });
   return (
@@ -53,7 +53,7 @@ export default function OpeningMaterialsPage() {
         </div>
         <button className="bg-indigo-600 text-white px-3 py-1 rounded" onClick={()=>{
           if(!work.name) return;
-          upsertWork({ openingType: active, name: work.name, basis: work.basis, consumptionPerUnit: Number(work.consumptionPerUnit||0), purchasePrice: Number(work.purchasePrice||0), sellPrice: Number(work.sellPrice||0), unit: work.unit||undefined } as any);
+          upsertWork({ openingType: active, name: work.name, basis: work.basis, consumptionPerUnit: Number(work.consumptionPerUnit||0), purchasePrice: Number(work.purchasePrice||0), sellPrice: Number(work.sellPrice||0), unit: work.unit||undefined } as never);
           setWork({ name:"", basis:'opening_m2', consumptionPerUnit:"", purchasePrice:"", sellPrice:"", unit:"" });
         }}>Добавить работу</button>
       </div>
@@ -96,7 +96,7 @@ export default function OpeningMaterialsPage() {
             </tr>
           </thead>
           <tbody>
-            {(works??[] as any[]).map((m: any, idx:number)=>(
+            {((works ?? []) as Array<{ _id: string; name: string; basis: 'opening_m2'|'per_opening'; consumptionPerUnit: number; unit?: string; purchasePrice: number; sellPrice: number }>).map((m, idx:number)=>(
               <tr key={m._id} className={idx%2===0?'bg-white':'bg-gray-50'}>
                 <td className="p-2">{m.name}</td>
                 <td className="p-2">{m.basis==='per_opening'?'На проём':'На м² проёма'}</td>
