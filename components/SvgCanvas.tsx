@@ -337,7 +337,6 @@ export default function SvgCanvas({
         type: 'line',
         data: { points: [ { x: cx, y: cy }, { x: cx, y: cy + 12 } ] },
         style: { stroke: '#f97316', strokeWidth: 2, fill: 'transparent', opacity: 1 },
-        semanticType: 'bra',
       };
       onElementsChange([...elements, shade, arm]);
       return;
