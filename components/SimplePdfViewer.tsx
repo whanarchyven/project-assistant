@@ -39,16 +39,22 @@ export default function SimplePdfViewer({
   // Получаем проект с URL для PDF файла
   const project = useQuery(api.projects.getProjectWithPdfUrl, { projectId });
 
+  const isControlled = typeof controlledScale === 'number';
+  const currentScale = isControlled ? (controlledScale as number) : scale;
+
+  // Сообщаем наружу о локальных изменениях масштаба только в неконтролируемом режиме
   useEffect(() => {
+    if (isControlled) return;
     if (onScaleChange) onScaleChange(scale);
-  }, [scale, onScaleChange]);
+  }, [scale, onScaleChange, isControlled]);
 
   // При внешнем управлении масштабом синхронизируем локальное состояние
   useEffect(() => {
+    if (isControlled) return; // в контролируемом режиме локальный scale не трогаем
     if (typeof controlledScale === 'number' && controlledScale > 0 && controlledScale !== scale) {
       setScale(controlledScale);
     }
-  }, [controlledScale, scale]);
+  }, [controlledScale, scale, isControlled]);
 
   useEffect(() => {
     if (onPanChange) {
@@ -112,15 +118,19 @@ export default function SimplePdfViewer({
       const cursorX = rect ? (e.clientX - rect.left) : 0;
       const cursorY = rect ? (e.clientY - rect.top) : 0;
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const nextScale = Math.max(0.1, Math.min(5, scale * delta));
-      const ratio = nextScale / (scale || 1);
+      const nextScale = Math.max(0.1, Math.min(5, currentScale * delta));
+      const ratio = nextScale / (currentScale || 1);
       // Сдвигаем pan так, чтобы точка под курсором оставалась на месте
       const nextPan = {
         x: cursorX * (1 - ratio) + ratio * pan.x,
         y: cursorY * (1 - ratio) + ratio * pan.y,
       };
       setPan(nextPan);
-      setScale(nextScale);
+      if (isControlled) {
+        onScaleChange?.(nextScale);
+      } else {
+        setScale(nextScale);
+      }
     } else {
       // Панорамирование
       setPan(prev => ({
@@ -189,7 +199,7 @@ export default function SimplePdfViewer({
           <PdfDocument
             url={pdfUrl}
             currentPage={currentPage}
-            scale={scale}
+            scale={currentScale}
             onDocumentLoadSuccess={handleDocumentLoadSuccess}
           />
         </div>

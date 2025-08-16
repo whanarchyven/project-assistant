@@ -18,6 +18,13 @@ export default function CreateProject() {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type === 'application/pdf') {
+      const maxBytes = 100 * 1024 * 1024; // 100MB
+      if (file.size > maxBytes) {
+        alert('Файл слишком большой. Максимальный размер — 100 МБ.');
+        event.target.value = '';
+        setSelectedFile(null);
+        return;
+      }
       setSelectedFile(file);
     } else {
       alert('Пожалуйста, выберите PDF файл');
@@ -138,7 +145,7 @@ export default function CreateProject() {
                   </label>
                   <p className="pl-1">или перетащите сюда</p>
                 </div>
-                <p className="text-xs text-gray-500">PDF до 10MB</p>
+                <p className="text-xs text-gray-500">PDF до 100MB</p>
               </div>
             </div>
             {selectedFile && (

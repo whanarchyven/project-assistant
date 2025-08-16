@@ -366,6 +366,10 @@ export default function DrawingCanvas({
 
 
   const handleClearAll = useCallback(async () => {
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm('Вы уверены, что хотите очистить слой?');
+      if (!ok) return;
+    }
     console.log('handleClearAll called');
     console.log('currentPageData:', currentPageData);
     console.log('pages:', pages);

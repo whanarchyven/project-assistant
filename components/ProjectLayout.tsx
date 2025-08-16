@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import { Id } from '../convex/_generated/dataModel';
@@ -28,6 +28,23 @@ export default function ProjectLayout({
   // Вызов хука всегда на одном уровне; если projectId нет, запрос просто не выполнится
   const project = useQuery(api.projects.getProject, { projectId: (projectId as Id<'projects'>) || ('' as unknown as Id<'projects'>) });
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const openSidebar = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    setIsSidebarOpen(true);
+  };
+
+  const scheduleCloseSidebar = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+    }
+    closeTimeoutRef.current = setTimeout(() => setIsSidebarOpen(false), 250);
+  };
 
   if (!isAuthenticated) {
     return (
@@ -66,12 +83,27 @@ export default function ProjectLayout({
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
       {/* Верхняя панель навигации */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+      <div className="bg-white shadow-sm border-b border-gray-200 relative z-30">
         <div className="flex items-center justify-between px-6 py-3">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-semibold text-gray-900">
-              Планировщик сметы
-            </h1>
+          <div className="flex items-center space-x-2">
+          <button
+              className="inline-flex items-center justify-center h-8 px-3 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+              onClick={() => router.push('/projects')}
+              title="Назад к проектам"
+            >
+              ←
+            </button>
+            <button
+              className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
+              aria-label="Информация по этапам"
+              title="Информация по этапам"
+              onMouseEnter={openSidebar}
+              onMouseLeave={scheduleCloseSidebar}
+            >
+              i
+            </button>
+            
+            <h1 className="text-xl font-semibold text-gray-900">Планировщик сметы</h1>
             {projectId && (
               <div className="flex items-center space-x-2">
                 <span className="text-gray-500">|</span>
@@ -87,32 +119,44 @@ export default function ProjectLayout({
         </div>
       </div>
 
-      {/* Панель этапов */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="px-6 py-2">
-          <div className="flex space-x-1 overflow-x-auto">
-            {stages.map((stage) => (
-              <button
-                key={stage.id}
-                className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  currentStage === stage.id
-                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title={stage.description}
-                onClick={() => onStageChange && onStageChange(stage.id)}
-                disabled={stage.id !== 'measurement' && !(project && project.scale)}
-              >
-                {stage.name}
-              </button>
-            ))}
+      {/* Левый сайдбар с этапами и сводкой */}
+      <div
+        className={`fixed left-0 top-0 h-screen w-1/2 bg-white border-r border-gray-200 shadow-lg transform transition-transform duration-200 z-40 ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        onMouseEnter={openSidebar}
+        onMouseLeave={scheduleCloseSidebar}
+      >
+        <div className="pt-4 pb-4 px-4">{/* отступ под верхнюю панель */}
+        <div className="flex flex-col gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">Этапы сметы</h2>
+              <p className="text-sm text-gray-600">Выберите этап для просмотра</p>
+            </div>
+          <div className="my-3">
+            <div className="flex flex-wrap gap-2">
+              {stages.map((stage) => (
+                <button
+                  key={stage.id}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    currentStage === stage.id
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  title={stage.description}
+                  onClick={() => onStageChange && onStageChange(stage.id)}
+                  disabled={stage.id !== 'measurement' && !(project && project.scale)}
+                >
+                  {stage.name}
+                </button>
+              ))}
+            </div>
           </div>
+          {projectId && (
+            <div className="mt-2">
+              <StageSummary projectId={projectId as Id<'projects'>} currentStage={(currentStage as unknown) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
+            </div>
+          )}
         </div>
-        {projectId && (
-          <div className="px-6 py-2">
-            <StageSummary projectId={projectId as Id<'projects'>} currentStage={(currentStage as unknown) as 'measurement' | 'installation' | 'demolition' | 'markup' | 'baseboards' | 'electrical' | 'plumbing' | 'finishing' | 'materials'} />
-          </div>
-        )}
       </div>
 
       {/* Основной контент (прокручиваемый) */}

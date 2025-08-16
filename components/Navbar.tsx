@@ -4,10 +4,17 @@ import React from "react";
 import Link from "next/link";
 import { useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { usePathname } from "next/navigation";
 
 export default function Navbar() {
   const { isAuthenticated } = useConvexAuth();
   const { signOut } = useAuthActions();
+  const pathname = usePathname();
+
+  // Прячем верхнюю навигацию на страницах проекта
+  if (pathname && pathname.startsWith("/project/")) {
+    return null;
+  }
 
   return (
     <header className="w-full bg-white border-b border-gray-200 sticky top-0 z-50">

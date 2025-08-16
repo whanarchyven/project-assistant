@@ -619,7 +619,8 @@ export default function SvgCanvas({
   // Функции проверки попадания
   const isPointNearLine = (point: { x: number; y: number }, lineData: any) => {
     const { x1, y1, x2, y2 } = lineData;
-    const tolerance = 5;
+    // Увеличим допуск, чтобы короче сегменты-проёмы выбирались проще
+    const tolerance = 8;
     
     const A = point.x - x1;
     const B = point.y - y1;

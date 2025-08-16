@@ -200,7 +200,7 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!triggers}>Работы</button>
         </div>
       </div>
-      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="px-4 py-4 flex flex-col gap-4">
         {/* Комнаты: кратко */}
         <div className="rounded-md bg-emerald-50 px-3 py-3 border border-emerald-100">
           <div className="text-xs uppercase tracking-wide text-emerald-700/80">Комнаты</div>
@@ -578,7 +578,7 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!worksComputed}>Работы</button>
         </div>
       </div>
-      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md bg-purple-50 px-3 py-3 border border-purple-100">
           <div className="text-xs uppercase tracking-wide text-purple-700/80">Суммарная длина</div>
           <div className="mt-1 text-2xl font-semibold text-purple-700">{totals ? nf.format(totals.lengthM) : '—'} м</div>
@@ -750,7 +750,7 @@ function ElectricalSummary({ projectId }: { projectId: Id<'projects'> }) {
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!stats}>Работы</button>
         </div>
       </div>
-      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-5 gap-4">
+      <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(14,165,233,0.08)', borderColor: 'rgba(14,165,233,0.25)' }}>
           <div className="text-xs uppercase tracking-wide" style={{ color: '#0284c7' }}>Светильники</div>
           <div className="mt-1 text-2xl font-semibold" style={{ color: '#0284c7' }}>{stats ? stats.spotlights : '—'}</div>
@@ -1024,7 +1024,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
           </button>
         </div>
       </div>
-      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md bg-rose-50 px-3 py-3 border border-rose-100">
           <div className="text-xs uppercase tracking-wide text-rose-700/80">Суммарная длина стен</div>
           <div className="mt-1 text-2xl font-semibold text-rose-700">
@@ -1247,7 +1247,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
           </button>
         </div>
       </div>
-      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md bg-emerald-50 px-3 py-3 border border-emerald-100">
           <div className="text-xs uppercase tracking-wide text-emerald-700/80">Суммарная длина стен</div>
           <div className="mt-1 text-2xl font-semibold text-emerald-700">

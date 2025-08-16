@@ -43,6 +43,11 @@ export const createProject = mutation({
       projectId,
     });
 
+    // Создать базовые типы комнат для пользователя, если их нет
+    await ctx.scheduler.runAfter(0, internal.projects.ensureDefaultRoomTypes, {
+      userId,
+    });
+
     return projectId;
   },
 });
@@ -635,6 +640,26 @@ export const copyDefaultMaterialsToProject = internalMutation({
         unit: row.unit,
         triggerType: (row as any).triggerType,
       });
+    }
+    return null;
+  },
+});
+
+export const ensureDefaultRoomTypes = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Проверим, есть ли уже типы
+    const existing = await ctx.db
+      .query("roomTypes")
+      .withIndex("by_owner", (q) => q.eq("ownerUserId", args.userId))
+      .collect();
+    const names = new Set(existing.map((x) => x.name.trim().toLowerCase()));
+    const defaults = ["Жилая", "Ванная"];
+    for (const name of defaults) {
+      if (!names.has(name.trim().toLowerCase())) {
+        await ctx.db.insert("roomTypes", { ownerUserId: args.userId, name });
+      }
     }
     return null;
   },
