@@ -41,6 +41,7 @@ export default function DrawingCanvas({
   const [pendingOpening, setPendingOpening] = useState<{ elementId: string; snappedPoints: Array<{x:number;y:number}>; room1?: string; room2?: string } | null>(null);
   const [openingType, setOpeningType] = useState<'opening'|'door'|'window'>('opening');
   const [openingHeight, setOpeningHeight] = useState<string>('2000');
+  const [openingHeightInitialized, setOpeningHeightInitialized] = useState<boolean>(false);
   const [openingPairMode, setOpeningPairMode] = useState<boolean>(false);
   const [isPickingPairWall, setIsPickingPairWall] = useState<boolean>(false);
   const [pickedPairSegment, setPickedPairSegment] = useState<{ a:{x:number;y:number}; b:{x:number;y:number} } | null>(null);
@@ -134,15 +135,16 @@ export default function DrawingCanvas({
     }
   }, [project]);
 
-  // По умолчанию высота проёма = высота потолка
+  // По умолчанию высота проёма = высота потолка (инициализируем один раз на сеанс создания, чтобы переносилась в парный)
   useEffect(() => {
-    if (openingModalOpen) {
+    if (openingModalOpen && !openingHeightInitialized) {
       const h = project?.ceilingHeight;
       if (typeof h === 'number' && h > 0) {
         setOpeningHeight(String(h));
       }
+      setOpeningHeightInitialized(true);
     }
-  }, [openingModalOpen, project?.ceilingHeight]);
+  }, [openingModalOpen, project?.ceilingHeight, openingHeightInitialized]);
 
   // Синхронизация элементов из базы данных
   useEffect(() => {
@@ -718,6 +720,7 @@ export default function DrawingCanvas({
               setPendingOpening(null);
               setIsPickingPairWall(false);
               setPickedPairSegment(null);
+              setOpeningHeightInitialized(false);
             }}>
               <div className="space-y-3">
                 <label className="block text-sm text-gray-700">
@@ -743,7 +746,7 @@ export default function DrawingCanvas({
                 )}
               </div>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button type="button" onClick={()=>{ setOpeningModalOpen(false); setPendingOpening(null); }} className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Отмена</button>
+                <button type="button" onClick={()=>{ setOpeningModalOpen(false); setPendingOpening(null); setOpeningHeightInitialized(false); }} className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Отмена</button>
                 <button type="submit" disabled={openingPairMode && !pickedPairSegment} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">Сохранить</button>
               </div>
             </form>

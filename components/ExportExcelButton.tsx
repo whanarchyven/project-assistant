@@ -51,9 +51,12 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
   const summaryInstallation = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'installation' });
   const baseboardLines = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'materials' });
   const electricalEls = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'electrical' });
+  const demoLines = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'demolition' });
+  const instLines = useQuery(api.svgElements.listSvgByProjectAndStage, { projectId, stageType: 'installation' });
   const summaryMarkup = useQuery(api.svgElements.getStageSummaryByProject, { projectId, stageType: 'markup' });
   const rooms = useQuery(api.rooms.getRoomsWithGeometryByProject, { projectId });
   const openings = useQuery(api.rooms.listOpeningsByProject, { projectId });
+  const roomTypes = useQuery(api.rooms.listRoomTypes, {});
   const roomTypeMats = useQuery(api.rooms.listAllRoomTypeMaterials, {});
   const roomTypeWorks = useQuery(api.rooms.listAllRoomTypeWorks as any, {} as any);
   const matsOpening = useQuery(api.rooms.listOpeningMaterials, { openingType: 'opening' });
@@ -393,34 +396,66 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
       formatNumericCellsTo2(ws);
       XLSX.utils.book_append_sheet(wb, ws, 'Отделка');
     }
-    // ======= Лист «Смета» =======
+    // ======= Лист «Смета» по фикс-правилам =======
     const estimate: any[][] = [];
     estimate.push(['Смета проекта']);
     estimate.push([project?.name ?? '']);
     estimate.push(['']);
-    estimate.push(['Заказчик:', '', '', 'Подпись заказчика:', '']);
-    estimate.push(['Исполнитель:', '', '', 'Подпись исполнителя:', '']);
-    estimate.push(['Дата:', new Date().toLocaleDateString('ru-RU')]);
-    estimate.push(['']);
-    estimate.push(['Этап', 'Сумма']);
-    estimate.push(['Демонтаж', r2(blocksTotals['Демонтаж'] || 0)]);
-    estimate.push(['Монтаж', r2(blocksTotals['Монтаж'] || 0)]);
-    estimate.push(['Отделка', r2(blocksTotals['Отделка'] || 0)]);
-    estimate.push(['Плинтусы', r2(blocksTotals['Плинтусы'] || 0)]);
-    estimate.push(['Электрика', r2(blocksTotals['Электрика'] || 0)]);
-    const totalSum = r2(Object.values(blocksTotals).reduce((a,b)=>a+(b||0),0));
-    estimate.push(['Итого', totalSum]);
+    estimate.push(['Наименование работ', 'Ед.', 'Кол-во', 'За ед., ₽', 'Сумма, ₽']);
+
+    const pushRow = (name: string, unit: string, qty: number, price: number) => {
+      const q = Number(qty) || 0;
+      const p = Number(price) || 0;
+      const s = q * p;
+      estimate.push([name, unit, r2(q), r2(p), r2(s)]);
+    };
+
+    const demAreaM2 = r2((dem.lengthM || 0) * (ceilingHeightM || 0));
+    const instAreaM2 = r2((inst.lengthM || 0) * (ceilingHeightM || 0));
+    const totalsByRoom = (() => {
+      const out = { floorM2: 0, wallM2: 0, wallM2Living: 0, wallM2Bath: 0 };
+      if (!rooms || !mPerPx || !ceilingHeightM) return out;
+      const bathIds = new Set((roomTypes ?? []).filter((t:any)=> (t.name||'').toString().toLowerCase()==='ванная').map((t:any)=> t._id as string));
+      for (const r of rooms) {
+        let perimPx = 0; let area2 = 0; const pts = r.points as Array<{x:number;y:number}>;
+        for (let i=0;i<pts.length;i++){ const a=pts[i], b=pts[(i+1)%pts.length]; perimPx += Math.hypot(b.x-a.x,b.y-a.y); area2 += (a.x*b.y - b.x*a.y); }
+        const perimM = perimPx * mPerPx; const floorM2 = Math.abs(area2)/2 * (mPerPx*mPerPx);
+        let openingsAreaM2 = 0; const rel = (openings as any[]|undefined)?.filter(o => o.roomId1 === (r.roomId as any) || o.roomId2 === (r.roomId as any)) ?? [];
+        for (const op of rel) { const lenM = op.lengthPx * mPerPx; const hM = (op.heightMm ?? 0)/1000; openingsAreaM2 += lenM * hM; }
+        const wallM2 = Math.max(0, perimM*ceilingHeightM - openingsAreaM2);
+        out.floorM2 += floorM2; out.wallM2 += wallM2; if (bathIds.has(r.roomTypeId as any)) out.wallM2Bath += wallM2; else out.wallM2Living += wallM2;
+      }
+      return out;
+    })();
+    const baseTotals = computeBaseboards();
+
+    pushRow('Демонтаж перегородок', 'м²', demAreaM2, 200);
+    pushRow('Кладка перегородок', 'м²', instAreaM2, 220);
+    pushRow('Заливка стяжки', 'м²', totalsByRoom.floorM2, 220);
+    pushRow('Штукатурка стен', 'м²', totalsByRoom.wallM2, 150);
+    pushRow('Финишная шпаклёвка', 'м²', totalsByRoom.wallM2Living, 180);
+    pushRow('Укладка плитки', 'м²', totalsByRoom.wallM2Bath, 900);
+    pushRow('Установка плинтуса', 'м', baseTotals.lengthM, 99);
+
+    estimate.push(['', '', '', '', '']);
+    const totalSum = r2(estimate.slice(4).reduce((acc, row) => acc + (Number(row[4]) || 0), 0));
+    estimate.push(['Итого', '', '', '', totalSum]);
+
     const wsEstimate = XLSX.utils.aoa_to_sheet(estimate);
     addMerges(wsEstimate, ['A1:E1']);
-    setCols(wsEstimate, [24, 20, 4, 26, 20]);
+    setCols(wsEstimate, [36, 10, 12, 12, 16]);
     formatNumericCellsTo2(wsEstimate);
     XLSX.utils.book_append_sheet(wb, wsEstimate, 'Смета');
 
     // Листы по этапам добавлены выше
 
-    // Лист «Объёмы»
+    // Лист «Обмер»
     if (rooms && openings && mPerPx) {
-      const rws: any[] = [['Комната', 'S пола, м2', 'Периметр, м', 'S стен, м2']];
+      const vols: any[][] = [];
+      // (Удалён блок «Сводка по объектам» по требованию)
+
+      // Таблица по комнатам
+      const rws: any[] = [['Наименование', 'Периметр, м', 'Площадь, м²', 'Площадь стен, м²', 'Высота, м']];
       const H = ceilingHeightM ?? 0;
       for (const r of rooms) {
         let perimPx = 0; let area2=0; const pts=r.points as Array<{x:number;y:number}>;
@@ -433,12 +468,85 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
           const lengthM = op.lengthPx * mPerPx; const hM = (op.heightMm ?? 0)/1000; openingsAreaM2 += lengthM * hM;
         }
         const wallM2 = Math.max(0, perimPx * mPerPx * H - openingsAreaM2);
-        rws.push([r.name, floorM2, perimPx*mPerPx, wallM2]);
+        const typeName = (roomTypes ?? []).find((t:any)=> (t._id as string) === (r.roomTypeId as any))?.name || '';
+        rws.push([`${r.name}${typeName?' ('+typeName+')':''}`, r2(perimPx*mPerPx), r2(floorM2), r2(wallM2), r2(H)]);
       }
-      const wsRooms = XLSX.utils.aoa_to_sheet(rws);
-      setCols(wsRooms, [26,16,16,16]);
+      vols.push(...rws);
+
+      // Таблица по проёмам
+      vols.push(['']);
+      vols.push(['Проёмы']);
+      vols.push(['Проём', 'Тип', 'Высота, м', 'Длина, м', 'Вертикальная площадь, м²']);
+      if (openings && mPerPx) {
+        // Нумерация комнат для подписи пар (roomIndex)
+        const roomIndexById = new Map<string, number>();
+        rooms.forEach((r: any, idx: number) => roomIndexById.set(r.roomId as string, idx + 1));
+        let idxOp = 1;
+        const typeLabel: Record<'opening'|'door'|'window', string> = { opening: 'проём', door: 'дверь', window: 'окно' };
+        for (const op of openings as any[]) {
+          const lengthM = (op.lengthPx ?? 0) * mPerPx;
+          const heightM = ((op.heightMm ?? 0) / 1000);
+          const verticalAreaM2 = lengthM * heightM; // длина × высота
+          const i = roomIndexById.get(op.roomId1 as string);
+          const j = op.roomId2 ? roomIndexById.get(op.roomId2 as string) : undefined;
+          const label = (i && j) ? `Проём ${i}-${j}` : (i ? `Проём ${i}` : `Проём ${idxOp}`);
+          const t: 'opening'|'door'|'window' = op.openingType as any;
+          vols.push([label, typeLabel[t], r2(heightM), r2(lengthM), r2(verticalAreaM2)]);
+          idxOp++;
+        }
+      }
+
+      // Демонтаж — детализация по стенам
+      vols.push(['']);
+      vols.push(['Демонтаж']);
+      vols.push(['Стена', 'Длина, м', 'Площадь, м²', 'Высота, м']);
+      if (demoLines && ceilingHeightM) {
+        let idx = 1;
+        for (const el of demoLines) {
+          if (el.elementType !== 'line') continue;
+          const pts = (el.data?.points ?? []) as Array<{x:number;y:number}>;
+          if (!Array.isArray(pts) || pts.length < 2) continue;
+          let lengthM = 0; for (let i=0;i<pts.length-1;i++){ lengthM += Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y) * mPerPx!; }
+          vols.push([`Стена ${idx++}`, r2(lengthM), r2(lengthM * ceilingHeightM), r2(ceilingHeightM)]);
+        }
+      }
+
+      // Монтаж — детализация по стенам
+      vols.push(['']);
+      vols.push(['Монтаж']);
+      vols.push(['Стена', 'Длина, м', 'Площадь, м²', 'Высота, м']);
+      if (instLines && ceilingHeightM) {
+        let idx = 1;
+        for (const el of instLines) {
+          if (el.elementType !== 'line') continue;
+          const pts = (el.data?.points ?? []) as Array<{x:number;y:number}>;
+          if (!Array.isArray(pts) || pts.length < 2) continue;
+          let lengthM = 0; for (let i=0;i<pts.length-1;i++){ lengthM += Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y) * mPerPx!; }
+          vols.push([`Стена ${idx++}`, r2(lengthM), r2(lengthM * ceilingHeightM), r2(ceilingHeightM)]);
+        }
+      }
+
+      // Электрика
+      vols.push(['']);
+      vols.push(['Электрика']);
+      vols.push(['Наименование', 'Кол-во']);
+      const e = computeElectrical();
+      vols.push(['Светильники', r2(e.spotlights)]);
+      vols.push(['Бра', r2(e.bras)]);
+      vols.push(['Розетки', r2(e.outlets)]);
+      vols.push(['Выключатели', r2(e.switches)]);
+      vols.push(['LED-ленты, м', r2(e.ledLengthM)]);
+
+      // Плинтус
+      vols.push(['']);
+      vols.push(['Плинтус']);
+      vols.push(['Длина, м', r2(base.lengthM || 0)]);
+      vols.push(['Углы, шт', r2(base.corners || 0)]);
+
+      const wsRooms = XLSX.utils.aoa_to_sheet(vols);
+      setCols(wsRooms, [32,18,18,18,12]);
       formatNumericCellsTo2(wsRooms);
-      XLSX.utils.book_append_sheet(wb, wsRooms, 'Объёмы');
+      XLSX.utils.book_append_sheet(wb, wsRooms, 'Обмер');
     }
 
     // Генерация файла
