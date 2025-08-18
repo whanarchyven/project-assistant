@@ -195,10 +195,10 @@ function MarkupSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Разметка</div>
-        <div className="ml-auto flex items-center gap-2">
+        {/* <div className="ml-auto flex items-center gap-2">
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShow(true)} disabled={!materials}>Материалы</button>
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!triggers}>Работы</button>
-        </div>
+        </div> */}
       </div>
       <div className="px-4 py-4 flex flex-col gap-4">
         {/* Комнаты: кратко */}
@@ -572,11 +572,11 @@ function BaseboardsSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,18 8,14 12,16 16,12 21,15"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Плинтусы</div>
-        <div className="ml-auto flex items-center gap-2">
+        {/* <div className="ml-auto flex items-center gap-2">
           
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShowMaterials(true)} disabled={!materialsComputed}>Материалы</button>
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!worksComputed}>Работы</button>
-        </div>
+        </div> */}
       </div>
       <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md bg-purple-50 px-3 py-3 border border-purple-100">
@@ -745,10 +745,10 @@ function ElectricalSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Электрика</div>
-        <div className="ml-auto flex items-center gap-2">
+        {/* <div className="ml-auto flex items-center gap-2">
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50" onClick={() => setShowMaterials(true)} disabled={!stats}>Материалы</button>
           <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-700 text-white hover:bg-gray-800 disabled:opacity-50" onClick={() => setShowWorks(true)} disabled={!stats}>Работы</button>
-        </div>
+        </div> */}
       </div>
       <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md px-3 py-3 border" style={{ backgroundColor: 'rgba(14,165,233,0.08)', borderColor: 'rgba(14,165,233,0.25)' }}>
@@ -1007,7 +1007,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Демонтаж</div>
-        <div className="ml-auto flex items-center gap-2">
+        {/* <div className="ml-auto flex items-center gap-2">
           <button
             className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50"
             onClick={() => setShowMaterials(true)}
@@ -1022,7 +1022,7 @@ function DemolitionSummary({ projectId }: { projectId: Id<'projects'> }) {
           >
             Работы
           </button>
-        </div>
+        </div> */}
       </div>
       <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md bg-rose-50 px-3 py-3 border border-rose-100">
@@ -1230,7 +1230,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg>
         </div>
         <div className="text-sm font-medium text-gray-900">Сводка этапа: Монтаж</div>
-        <div className="ml-auto flex items-center gap-2">
+        {/* <div className="ml-auto flex items-center gap-2">
           <button
             className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50"
             onClick={() => setShowMaterials(true)}
@@ -1245,7 +1245,7 @@ function InstallationSummary({ projectId }: { projectId: Id<'projects'> }) {
           >
             Работы
           </button>
-        </div>
+        </div> */}
       </div>
       <div className="px-4 py-4 flex flex-col gap-4">
         <div className="rounded-md bg-emerald-50 px-3 py-3 border border-emerald-100">

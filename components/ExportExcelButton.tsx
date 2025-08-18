@@ -152,8 +152,8 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
       return [row.name, row.consumptionPerUnit, 'ч', qty, cost] as [string, number, string, number, number];
     });
     blocksTotals['Демонтаж'] = [...demMaterials, ...demWorks].reduce((a,x)=>a+(x[4]||0),0);
-    // Cоздаём отдельный лист «Демонтаж»
-    {
+    // Cоздаём отдельный лист «Демонтаж» (отключено)
+    if (false) {
       const aoa: any[][] = [];
       aoa.push(['Сводка этапа: Демонтаж']);
       aoa.push(['Длина стен, м', dem.lengthM]);
@@ -186,7 +186,8 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
       return [row.name, row.consumptionPerUnit, 'ч', qty, cost];
     });
     blocksTotals['Монтаж'] = [...instMaterials, ...instWorks].reduce((a,x)=>a+(x[4]||0),0);
-    {
+    // Лист «Монтаж» (отключено)
+    if (false) {
       const aoa: any[][] = [];
       aoa.push(['Сводка этапа: Монтаж']);
       aoa.push(['Длина стен, м', inst.lengthM]);
@@ -223,7 +224,8 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
       return [row.name, row.consumptionPerUnit, 'ч', qty, cost];
     });
     blocksTotals['Плинтусы'] = [...baseMaterials, ...baseWorks].reduce((a,x)=>a+(x[4]||0),0);
-    {
+    // Лист «Плинтусы» (отключено)
+    if (false) {
       const aoa: any[][] = [];
       aoa.push(['Сводка этапа: Плинтусы']);
       aoa.push(['Длина, м', base.lengthM]);
@@ -257,7 +259,8 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
       return [row.name, row.consumptionPerUnit, 'ч', qty, cost];
     });
     blocksTotals['Электрика'] = [...elecMaterials, ...elecWorks].reduce((a,x)=>a+(x[4]||0),0);
-    {
+    // Лист «Электрика» (отключено)
+    if (false) {
       const aoa: any[][] = [];
       aoa.push(['Сводка этапа: Электрика']);
       aoa.push(['Светильники, шт', elec.spotlights]);
@@ -372,7 +375,8 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
     })();
     const markupWorks = [...markupWorksRoomTypes, ...markupWorksOpenings, ...markupWorksLegacy];
     blocksTotals['Отделка'] = [...markupMaterials, ...markupWorks].reduce((a,x)=>a+(x[4]||0),0);
-    {
+    // Лист «Отделка» (отключено)
+    if (false) {
       const aoa: any[][] = [];
       aoa.push(['Сводка этапа: Отделка']);
       aoa.push(['Периметр комнат, м', markupTotals.perimeterM]);

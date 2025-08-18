@@ -176,15 +176,15 @@ export default function SvgCanvas({
             return;
           }
         }
-        // Для монтажа/демонтажа линия завершается сразу по двум кликам
-        if ((stageType === 'installation' || stageType === 'demolition') && selectedTool === 'line') {
+        // Для монтажа/демонтажа/калибровки линия завершается сразу по двум кликам
+        if ((stageType === 'installation' || stageType === 'demolition' || calibrationMode || stageType === 'measurement') && selectedTool === 'line') {
           const pts = [...polygonPoints, point];
           if (pts.length === 2) {
             const newElement: SvgElement = {
               id: `element_${Date.now()}`,
               type: 'line',
               data: { points: pts },
-              style: { stroke: stageType === 'demolition' ? '#ef4444' : '#16a34a', strokeWidth: 3, fill: 'transparent', opacity: 1 },
+              style: { stroke: (stageType === 'demolition') ? '#ef4444' : (stageType === 'installation' ? '#16a34a' : '#3b82f6'), strokeWidth: 3, fill: 'transparent', opacity: 1 },
             };
             onElementsChange([...elements, newElement]);
             setPolygonPoints([]);
@@ -247,8 +247,8 @@ export default function SvgCanvas({
       setHoverSegment(best ? { a: best.a, b: best.b } : null);
     }
 
-    // Предпросмотр отрезка для монтажа/демонтажа: от первой точки до курсора
-    if ((stageType === 'installation' || stageType === 'demolition') && selectedTool === 'line') {
+    // Предпросмотр отрезка для монтажа/демонтажа/калибровки: от первой точки до курсора
+    if ((stageType === 'installation' || stageType === 'demolition' || calibrationMode || stageType === 'measurement') && selectedTool === 'line') {
       const point = getSvgPoint(e.clientX, e.clientY);
       setMousePoint(point);
     }
@@ -857,14 +857,14 @@ export default function SvgCanvas({
                 strokeDasharray={selectedTool === 'baseboard' ? '0,0' : (selectedTool === 'led_strip' ? '0,0' : '5,5')}
               />
             )}
-            {/* Предпросмотр второго сегмента для монтажа/демонтажа */}
-            {(selectedTool === 'line' && (stageType === 'installation' || stageType === 'demolition') && polygonPoints.length === 1 && mousePoint) && (
+            {/* Предпросмотр второго сегмента для монтажа/демонтажа/калибровки */}
+            {(selectedTool === 'line' && (stageType === 'installation' || stageType === 'demolition' || calibrationMode || stageType === 'measurement') && polygonPoints.length === 1 && mousePoint) && (
               <line
                 x1={polygonPoints[0].x}
                 y1={polygonPoints[0].y}
                 x2={mousePoint.x}
                 y2={mousePoint.y}
-                stroke={stageType === 'demolition' ? '#ef4444' : '#16a34a'}
+                stroke={stageType === 'demolition' ? '#ef4444' : (stageType === 'installation' ? '#16a34a' : '#3b82f6')}
                 strokeWidth={3}
                 strokeDasharray="4,4"
               />

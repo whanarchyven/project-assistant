@@ -27,9 +27,9 @@ export default function Navbar() {
             <Link href="/projects" className="text-sm text-gray-700 hover:text-gray-900">
               Мои проекты
             </Link>
-            <Link href="/settings" className="text-sm text-gray-700 hover:text-gray-900">
+            {/* <Link href="/settings" className="text-sm text-gray-700 hover:text-gray-900">
               Настройки
-            </Link>
+            </Link> */}
           </nav>
         </div>
         <div className="flex items-center gap-3">
