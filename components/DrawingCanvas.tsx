@@ -603,8 +603,7 @@ export default function DrawingCanvas({
           {/* Дополнительные настройки */}
           <div className="flex-1 p-4">
             <div className="space-y-4">
-              {/* Длина потолков */}
-              <CeilingHeightCard projectId={projectId} />
+                            
 
               {/* Список элементов */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -855,46 +854,7 @@ function ElementInfo({ element, projectId }: { element: SvgElement; projectId: I
   );
 }
 
-function CeilingHeightCard({ projectId }: { projectId: Id<'projects'> }) {
-  const project = useQuery(api.projects.getProject, { projectId });
-  const updateCeilingHeight = useMutation(api.projects.updateCeilingHeight);
-  const [value, setValue] = React.useState<string>(project?.ceilingHeight ? String(project.ceilingHeight) : '');
 
-  useEffect(() => {
-    setValue(project?.ceilingHeight ? String(project.ceilingHeight) : '');
-  }, [project?.ceilingHeight]);
-
-  return (
-    <div className="bg-gray-50 rounded-lg p-4">
-      <h4 className="font-medium text-gray-900 mb-2">Длина потолков</h4>
-      <div className="space-y-2">
-        <label className="block text-sm text-gray-700">
-          Высота потолка (мм)
-          <input
-            type="number"
-            step="1"
-            min="0"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-            placeholder="2700"
-          />
-        </label>
-        <button
-          onClick={async () => {
-            const num = parseFloat(value);
-            if (!isNaN(num) && num >= 0) {
-              await updateCeilingHeight({ projectId, ceilingHeight: num });
-            }
-          }}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Сохранить
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function CalibrationForm({ onCancel, onSubmit, pixels }: { onCancel: () => void; onSubmit: (mm: number, ceilingMm: number) => void; pixels: number }) {
   const [value, setValue] = React.useState<string>("");
