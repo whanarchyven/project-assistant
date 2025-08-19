@@ -6,6 +6,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import { Id } from '../convex/_generated/dataModel';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 // Helpers: rounding and sheet formatting
 const r2 = (val: any) => {
@@ -443,85 +444,157 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
     const totalSum = r2(estimate.slice(4).reduce((acc, row) => acc + (Number(row[4]) || 0), 0));
     estimate.push(['Итого', '', '', '', totalSum]);
 
-    // Попытка применить шаблон
+    // Подготовим данные для листа Обмер заранее (используем и в шаблонной ветке, и в фоллбэке)
+    const vols: any[][] = (() => {
+      const out: any[][] = [];
+      if (!(rooms && openings && mPerPx)) return out;
+      // Таблица по комнатам
+      const rws: any[] = [['Наименование', 'Периметр, м', 'Площадь, м²', 'Площадь стен, м²', 'Высота, м']];
+      const H = ceilingHeightM ?? 0;
+      for (const r of rooms) {
+        let perimPx = 0; let area2=0; const pts=r.points as Array<{x:number;y:number}>;
+        for (let i=0;i<pts.length;i++){ const a=pts[i], b=pts[(i+1)%pts.length]; perimPx += Math.hypot(b.x-a.x,b.y-a.y); area2 += (a.x*b.y - b.x*a.y);}    
+        const floorM2 = Math.abs(area2)/2 * (mPerPx*mPerPx);
+        // минус площадь проёмов для этой комнаты
+        let openingsAreaM2 = 0;
+        const rel = (openings as any[]).filter(o => o.roomId1 === (r.roomId as any) || o.roomId2 === (r.roomId as any));
+        for (const op of rel) {
+          const lengthM = op.lengthPx * mPerPx; const hM = (op.heightMm ?? 0)/1000; openingsAreaM2 += lengthM * hM;
+        }
+        const wallM2 = Math.max(0, perimPx * mPerPx * H - openingsAreaM2);
+        const typeName = (roomTypes ?? []).find((t:any)=> (t._id as string) === (r.roomTypeId as any))?.name || '';
+        rws.push([`${r.name}${typeName?' ('+typeName+')':''}`, r2(perimPx*mPerPx), r2(floorM2), r2(wallM2), r2(H)]);
+      }
+      out.push(...rws);
+      // Таблица по проёмам
+      out.push(['']);
+      out.push(['Проёмы']);
+      out.push(['Проём', 'Тип', 'Высота, м', 'Длина, м', 'Вертикальная площадь, м²']);
+      if (openings && mPerPx) {
+        const roomIndexById = new Map<string, number>();
+        rooms.forEach((r: any, idx: number) => roomIndexById.set(r.roomId as string, idx + 1));
+        let idxOp = 1;
+        const typeLabel: Record<'opening'|'door'|'window', string> = { opening: 'проём', door: 'дверь', window: 'окно' };
+        for (const op of openings as any[]) {
+          const lengthM = (op.lengthPx ?? 0) * mPerPx;
+          const heightM = ((op.heightMm ?? 0) / 1000);
+          const verticalAreaM2 = lengthM * heightM;
+          const i = roomIndexById.get(op.roomId1 as string);
+          const j = op.roomId2 ? roomIndexById.get(op.roomId2 as string) : undefined;
+          const label = (i && j) ? `Проём ${i}-${j}` : (i ? `Проём ${i}` : `Проём ${idxOp}`);
+          const t: 'opening'|'door'|'window' = op.openingType as any;
+          out.push([label, typeLabel[t], r2(heightM), r2(lengthM), r2(verticalAreaM2)]);
+          idxOp++;
+        }
+      }
+      // Демонтаж детально
+      out.push(['']); out.push(['Демонтаж']); out.push(['Стена', 'Длина, м', 'Площадь, м²', 'Высота, м']);
+      if (demoLines && ceilingHeightM) {
+        let idx = 1;
+        for (const el of demoLines) {
+          if (el.elementType !== 'line') continue;
+          const pts = (el.data?.points ?? []) as Array<{x:number;y:number}>;
+          if (!Array.isArray(pts) || pts.length < 2) continue;
+          let lengthM = 0; for (let i=0;i<pts.length-1;i++){ lengthM += Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y) * mPerPx!; }
+          out.push([`Стена ${idx++}`, r2(lengthM), r2(lengthM * ceilingHeightM), r2(ceilingHeightM)]);
+        }
+      }
+      // Монтаж детально
+      out.push(['']); out.push(['Монтаж']); out.push(['Стена', 'Длина, м', 'Площадь, м²', 'Высота, м']);
+      if (instLines && ceilingHeightM) {
+        let idx = 1;
+        for (const el of instLines) {
+          if (el.elementType !== 'line') continue;
+          const pts = (el.data?.points ?? []) as Array<{x:number;y:number}>;
+          if (!Array.isArray(pts) || pts.length < 2) continue;
+          let lengthM = 0; for (let i=0;i<pts.length-1;i++){ lengthM += Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y) * mPerPx!; }
+          out.push([`Стена ${idx++}`, r2(lengthM), r2(lengthM * ceilingHeightM), r2(ceilingHeightM)]);
+        }
+      }
+      // Электрика
+      const e = computeElectrical();
+      out.push(['']); out.push(['Электрика']); out.push(['Наименование', 'Кол-во']);
+      out.push(['Светильники', r2(e.spotlights)]);
+      out.push(['Бра', r2(e.bras)]);
+      out.push(['Розетки', r2(e.outlets)]);
+      out.push(['Выключатели', r2(e.switches)]);
+      out.push(['LED-ленты, м', r2(e.ledLengthM)]);
+      // Плинтус
+      out.push(['']); out.push(['Плинтус']); out.push(['Длина, м', r2(base.lengthM || 0)]); out.push(['Углы, шт', r2(base.corners || 0)]);
+      return out;
+    })();
+
+    // Попытка применить шаблон через exceljs (сохранение стилей)
     try {
       const resp = await fetch('/estimate_template.xlsx');
       if (resp.ok) {
         const buf = await resp.arrayBuffer();
-        wb = XLSX.read(buf, { type: 'array' });
-        const smetaSheetName = wb.SheetNames.find(n => n === 'Смета') || wb.SheetNames[0];
-        const wsTpl = wb.Sheets[smetaSheetName];
-        const matchToken = (text: string, token: string) => {
-          return (
-            text === token ||
-            text === `[[${token}]]` ||
-            text.includes(token) ||
-            text.includes(`[[${token}]]`)
-          );
-        };
-        const findCell = (token: string) => {
-          for (const addr of Object.keys(wsTpl)) {
-            if (addr.startsWith('!')) continue;
-            const cell = wsTpl[addr] as XLSX.CellObject | undefined;
-            if (cell && typeof cell.v === 'string' && matchToken(cell.v, token)) return addr;
-          }
-          return null;
-        };
-        const replaceAllInSheet = (token: string, value: string) => {
-          for (const addr of Object.keys(wsTpl)) {
-            if (addr.startsWith('!')) continue;
-            const cell = wsTpl[addr] as XLSX.CellObject | undefined;
-            if (cell && typeof cell.v === 'string' && matchToken(cell.v, token)) {
-              let v = cell.v as string;
-              v = v.split(`[[${token}]]`).join(value);
-              v = v.split(token).join(value);
-              wsTpl[addr] = { t: 's', v } as any;
+        const ej = new ExcelJS.Workbook();
+        await ej.xlsx.load(buf);
+        const ws = ej.getWorksheet('Смета') ?? ej.worksheets[0];
+        // Replace placeholders preserving styles
+        ws.eachRow({ includeEmpty: true }, (row)=>{
+          row.eachCell({ includeEmpty: true }, (cell)=>{
+            const v = (cell.value ?? '') as any;
+            if (typeof v === 'string') {
+              let s = v as string;
+              s = s.replaceAll('[[DATE]]', new Date().toLocaleDateString('ru-RU')).replaceAll('DATE', new Date().toLocaleDateString('ru-RU'));
+              s = s.replaceAll('[[PROJECT_NAME]]', project?.name ?? '').replaceAll('PROJECT_NAME', project?.name ?? '');
+              if (s !== v) cell.value = s;
             }
-          }
-        };
-        replaceAllInSheet('DATE', new Date().toLocaleDateString('ru-RU'));
-        replaceAllInSheet('PROJECT_NAME', project?.name ?? '');
-        const start = findCell('SMETA_START');
-        if (start) {
-          const startRef = XLSX.utils.decode_cell(start);
-          // очистим маркер, но сохраним стиль ячейки
-          const cellStart = wsTpl[start] as XLSX.CellObject | undefined;
-          if (cellStart) { cellStart.v = ''; cellStart.t = 's'; }
+          });
+        });
+        // Find SMETA_START
+        let startRow = -1, startCol = -1;
+        ws.eachRow({ includeEmpty: true }, (row, rIdx)=>{
+          row.eachCell({ includeEmpty: true }, (cell, cIdx)=>{
+            const raw = cell.value as any;
+            let text = '';
+            if (typeof raw === 'string') text = raw;
+            else if (raw && typeof raw === 'object' && Array.isArray((raw as any).richText)) {
+              text = ((raw as any).richText as Array<{ text: string }>).map(t=>t.text).join('');
+            }
+            const norm = text.replace(/\s|\u00A0|\[|\]/g, '').toUpperCase();
+            if (norm.includes('SMETASTART') || norm.includes('SMETA_START')) {
+              startRow = rIdx; startCol = cIdx; cell.value='';
+            }
+          });
+        });
+        if (startRow > 0 && startCol > 0) {
           const data = estimate.slice(4);
-          // Запишем значения по ячейкам, не создавая новые объекты — чтобы сохранить стили
-          for (let i = 0; i < data.length; i++) {
-            const row = data[i];
-            for (let j = 0; j < row.length; j++) {
-              const addr = XLSX.utils.encode_cell({ r: startRef.r + i, c: startRef.c + j });
-              const existing = wsTpl[addr] as XLSX.CellObject | undefined;
-              const styleSourceAddr = XLSX.utils.encode_cell({ r: startRef.r, c: startRef.c + j });
-              const styleSource = wsTpl[styleSourceAddr] as XLSX.CellObject | undefined;
-              const val = row[j];
-              if (existing) {
-                existing.v = val as any;
-                existing.t = typeof val === 'number' ? 'n' : 's';
-              } else {
-                // если в шаблоне не было ячейки — создадим простую (без стиля)
-                const newCell: any = { t: (typeof val === 'number' ? 'n' : 's'), v: val as any };
-                // Попробуем скопировать стиль из первой строки (если библиотека позволит сохранить)
-                if (styleSource && (styleSource as any).s) newCell.s = (styleSource as any).s;
-                wsTpl[addr] = newCell as any;
-              }
-            }
+          const baseRow = ws.getRow(startRow);
+          const baseRowHeight = baseRow.height; // может быть undefined
+          // Сохраним ширины задействованных колонок (если заданы в шаблоне)
+          const baseColWidths: Record<number, number | undefined> = {};
+          for (let j = 0; j < (data[0]?.length || 0); j++) {
+            const colIdx = startCol + j;
+            baseColWidths[colIdx] = ws.getColumn(colIdx).width;
           }
-          // Расширим диапазон листа, чтобы все новые ячейки попали в !ref
-          const curRef = (wsTpl['!ref'] as string) || XLSX.utils.encode_range({ s: startRef, e: startRef });
-          const r = XLSX.utils.decode_range(curRef);
-          r.e.r = Math.max(r.e.r, startRef.r + data.length - 1);
-          r.e.c = Math.max(r.e.c, startRef.c + (data[0]?.length || 1) - 1);
-          wsTpl['!ref'] = XLSX.utils.encode_range(r);
-          formatNumericCellsTo2(wsTpl);
+          for (let i=0;i<data.length;i++){
+            const row = ws.getRow(startRow + i);
+            for (let j=0;j<data[i].length;j++){
+              const cell = row.getCell(startCol + j);
+              const baseCell = baseRow.getCell(startCol + j);
+              cell.value = data[i][j] as any;
+              cell.style = { ...baseCell.style };
+            }
+            if (typeof baseRowHeight === 'number') row.height = baseRowHeight;
+            row.commit?.();
+          }
+          // Вернём ширины колонок (на случай если exceljs их изменил)
+          Object.entries(baseColWidths).forEach(([idx, w])=>{ if (typeof w === 'number') ws.getColumn(Number(idx)).width = w; });
         }
-        // Обмер
-        const wsVols = XLSX.utils.aoa_to_sheet(vols);
-        setCols(wsVols, [32,18,18,18,12]);
-        formatNumericCellsTo2(wsVols);
-        if (wb.SheetNames.includes('Обмер')) wb.Sheets['Обмер'] = wsVols; else XLSX.utils.book_append_sheet(wb, wsVols, 'Обмер');
+        // Обмер лист
+        const wsObm = ej.getWorksheet('Обмер') ?? ej.addWorksheet('Обмер');
+        wsObm.spliceRows(1, wsObm.rowCount, ...vols.map(r=>r));
+        // ширины колонок для «Обмер»
+        const obmWidths = [40, 22, 22, 22, 14];
+        wsObm.columns = obmWidths.map(w=>({ width: w }));
+        const out = await ej.xlsx.writeBuffer();
+        const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download=`Смета_${project?.name ?? 'проект'}_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url);
+        return;
       }
     } catch {}
     if (!wb) {
