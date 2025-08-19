@@ -133,9 +133,9 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
 
   const selectRows = (projectRows: any[], defaultRows: any[]) => (projectRows && projectRows.length>0 ? projectRows : (defaultRows ?? []));
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (disabled) return;
-    const wb = XLSX.utils.book_new();
+    let wb: XLSX.WorkBook | null = null;
 
     // ======= Подготовка блоков по этапам =======
     const blocksTotals: Record<string, number> = {};
@@ -413,7 +413,7 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
     const demAreaM2 = r2((dem.lengthM || 0) * (ceilingHeightM || 0));
     const instAreaM2 = r2((inst.lengthM || 0) * (ceilingHeightM || 0));
     const totalsByRoom = (() => {
-      const out = { floorM2: 0, wallM2: 0, wallM2Living: 0, wallM2Bath: 0 };
+      const out = { floorM2: 0, wallM2: 0, wallM2Living: 0, wallM2Bath: 0, floorM2Bath: 0, floorM2Living: 0 };
       if (!rooms || !mPerPx || !ceilingHeightM) return out;
       const bathIds = new Set((roomTypes ?? []).filter((t:any)=> (t.name||'').toString().toLowerCase()==='ванная').map((t:any)=> t._id as string));
       for (const r of rooms) {
@@ -423,7 +423,9 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
         let openingsAreaM2 = 0; const rel = (openings as any[]|undefined)?.filter(o => o.roomId1 === (r.roomId as any) || o.roomId2 === (r.roomId as any)) ?? [];
         for (const op of rel) { const lenM = op.lengthPx * mPerPx; const hM = (op.heightMm ?? 0)/1000; openingsAreaM2 += lenM * hM; }
         const wallM2 = Math.max(0, perimM*ceilingHeightM - openingsAreaM2);
-        out.floorM2 += floorM2; out.wallM2 += wallM2; if (bathIds.has(r.roomTypeId as any)) out.wallM2Bath += wallM2; else out.wallM2Living += wallM2;
+        out.floorM2 += floorM2; out.wallM2 += wallM2;
+        if (bathIds.has(r.roomTypeId as any)) { out.wallM2Bath += wallM2; out.floorM2Bath += floorM2; }
+        else { out.wallM2Living += wallM2; out.floorM2Living += floorM2; }
       }
       return out;
     })();
@@ -434,18 +436,106 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
     pushRow('Заливка стяжки', 'м²', totalsByRoom.floorM2, 220);
     pushRow('Штукатурка стен', 'м²', totalsByRoom.wallM2, 150);
     pushRow('Финишная шпаклёвка', 'м²', totalsByRoom.wallM2Living, 180);
-    pushRow('Укладка плитки', 'м²', totalsByRoom.wallM2Bath, 900);
+    pushRow('Укладка плитки', 'м²', totalsByRoom.wallM2Bath + totalsByRoom.floorM2Bath, 900);
     pushRow('Установка плинтуса', 'м', baseTotals.lengthM, 99);
 
     estimate.push(['', '', '', '', '']);
     const totalSum = r2(estimate.slice(4).reduce((acc, row) => acc + (Number(row[4]) || 0), 0));
     estimate.push(['Итого', '', '', '', totalSum]);
 
-    const wsEstimate = XLSX.utils.aoa_to_sheet(estimate);
-    addMerges(wsEstimate, ['A1:E1']);
-    setCols(wsEstimate, [36, 10, 12, 12, 16]);
-    formatNumericCellsTo2(wsEstimate);
-    XLSX.utils.book_append_sheet(wb, wsEstimate, 'Смета');
+    // Попытка применить шаблон
+    try {
+      const resp = await fetch('/estimate_template.xlsx');
+      if (resp.ok) {
+        const buf = await resp.arrayBuffer();
+        wb = XLSX.read(buf, { type: 'array' });
+        const smetaSheetName = wb.SheetNames.find(n => n === 'Смета') || wb.SheetNames[0];
+        const wsTpl = wb.Sheets[smetaSheetName];
+        const matchToken = (text: string, token: string) => {
+          return (
+            text === token ||
+            text === `[[${token}]]` ||
+            text.includes(token) ||
+            text.includes(`[[${token}]]`)
+          );
+        };
+        const findCell = (token: string) => {
+          for (const addr of Object.keys(wsTpl)) {
+            if (addr.startsWith('!')) continue;
+            const cell = wsTpl[addr] as XLSX.CellObject | undefined;
+            if (cell && typeof cell.v === 'string' && matchToken(cell.v, token)) return addr;
+          }
+          return null;
+        };
+        const replaceAllInSheet = (token: string, value: string) => {
+          for (const addr of Object.keys(wsTpl)) {
+            if (addr.startsWith('!')) continue;
+            const cell = wsTpl[addr] as XLSX.CellObject | undefined;
+            if (cell && typeof cell.v === 'string' && matchToken(cell.v, token)) {
+              let v = cell.v as string;
+              v = v.split(`[[${token}]]`).join(value);
+              v = v.split(token).join(value);
+              wsTpl[addr] = { t: 's', v } as any;
+            }
+          }
+        };
+        replaceAllInSheet('DATE', new Date().toLocaleDateString('ru-RU'));
+        replaceAllInSheet('PROJECT_NAME', project?.name ?? '');
+        const start = findCell('SMETA_START');
+        if (start) {
+          const startRef = XLSX.utils.decode_cell(start);
+          // очистим маркер, но сохраним стиль ячейки
+          const cellStart = wsTpl[start] as XLSX.CellObject | undefined;
+          if (cellStart) { cellStart.v = ''; cellStart.t = 's'; }
+          const data = estimate.slice(4);
+          // Запишем значения по ячейкам, не создавая новые объекты — чтобы сохранить стили
+          for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            for (let j = 0; j < row.length; j++) {
+              const addr = XLSX.utils.encode_cell({ r: startRef.r + i, c: startRef.c + j });
+              const existing = wsTpl[addr] as XLSX.CellObject | undefined;
+              const styleSourceAddr = XLSX.utils.encode_cell({ r: startRef.r, c: startRef.c + j });
+              const styleSource = wsTpl[styleSourceAddr] as XLSX.CellObject | undefined;
+              const val = row[j];
+              if (existing) {
+                existing.v = val as any;
+                existing.t = typeof val === 'number' ? 'n' : 's';
+              } else {
+                // если в шаблоне не было ячейки — создадим простую (без стиля)
+                const newCell: any = { t: (typeof val === 'number' ? 'n' : 's'), v: val as any };
+                // Попробуем скопировать стиль из первой строки (если библиотека позволит сохранить)
+                if (styleSource && (styleSource as any).s) newCell.s = (styleSource as any).s;
+                wsTpl[addr] = newCell as any;
+              }
+            }
+          }
+          // Расширим диапазон листа, чтобы все новые ячейки попали в !ref
+          const curRef = (wsTpl['!ref'] as string) || XLSX.utils.encode_range({ s: startRef, e: startRef });
+          const r = XLSX.utils.decode_range(curRef);
+          r.e.r = Math.max(r.e.r, startRef.r + data.length - 1);
+          r.e.c = Math.max(r.e.c, startRef.c + (data[0]?.length || 1) - 1);
+          wsTpl['!ref'] = XLSX.utils.encode_range(r);
+          formatNumericCellsTo2(wsTpl);
+        }
+        // Обмер
+        const wsVols = XLSX.utils.aoa_to_sheet(vols);
+        setCols(wsVols, [32,18,18,18,12]);
+        formatNumericCellsTo2(wsVols);
+        if (wb.SheetNames.includes('Обмер')) wb.Sheets['Обмер'] = wsVols; else XLSX.utils.book_append_sheet(wb, wsVols, 'Обмер');
+      }
+    } catch {}
+    if (!wb) {
+      wb = XLSX.utils.book_new();
+      const wsEstimate = XLSX.utils.aoa_to_sheet(estimate);
+      addMerges(wsEstimate, ['A1:E1']);
+      setCols(wsEstimate, [36, 10, 12, 12, 16]);
+      formatNumericCellsTo2(wsEstimate);
+      XLSX.utils.book_append_sheet(wb, wsEstimate, 'Смета');
+      const wsRooms = XLSX.utils.aoa_to_sheet(vols);
+      setCols(wsRooms, [32,18,18,18,12]);
+      formatNumericCellsTo2(wsRooms);
+      XLSX.utils.book_append_sheet(wb, wsRooms, 'Обмер');
+    }
 
     // Листы по этапам добавлены выше
 
