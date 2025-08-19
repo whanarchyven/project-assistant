@@ -136,7 +136,7 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
 
   const handleExport = async () => {
     if (disabled) return;
-    let wb: XLSX.WorkBook | null = null;
+    let wb: XLSX.WorkBook = XLSX.utils.book_new();
 
     // ======= Подготовка блоков по этапам =======
     const blocksTotals: Record<string, number> = {};
@@ -597,8 +597,7 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
         return;
       }
     } catch {}
-    if (!wb) {
-      wb = XLSX.utils.book_new();
+    if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
       const wsEstimate = XLSX.utils.aoa_to_sheet(estimate);
       addMerges(wsEstimate, ['A1:E1']);
       setCols(wsEstimate, [36, 10, 12, 12, 16]);
