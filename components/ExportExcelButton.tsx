@@ -466,26 +466,15 @@ export default function ExportExcelButton({ projectId }: { projectId: Id<'projec
         rws.push([`${r.name}${typeName?' ('+typeName+')':''}`, r2(perimPx*mPerPx), r2(floorM2), r2(wallM2), r2(H)]);
       }
       out.push(...rws);
-      // Таблица по проёмам
+      // Проёмы: только количество по типам
       out.push(['']);
       out.push(['Проёмы']);
-      out.push(['Проём', 'Тип', 'Высота, м', 'Длина, м', 'Вертикальная площадь, м²']);
-      if (openings && mPerPx) {
-        const roomIndexById = new Map<string, number>();
-        rooms.forEach((r: any, idx: number) => roomIndexById.set(r.roomId as string, idx + 1));
-        let idxOp = 1;
-        const typeLabel: Record<'opening'|'door'|'window', string> = { opening: 'проём', door: 'дверь', window: 'окно' };
-        for (const op of openings as any[]) {
-          const lengthM = (op.lengthPx ?? 0) * mPerPx;
-          const heightM = ((op.heightMm ?? 0) / 1000);
-          const verticalAreaM2 = lengthM * heightM;
-          const i = roomIndexById.get(op.roomId1 as string);
-          const j = op.roomId2 ? roomIndexById.get(op.roomId2 as string) : undefined;
-          const label = (i && j) ? `Проём ${i}-${j}` : (i ? `Проём ${i}` : `Проём ${idxOp}`);
-          const t: 'opening'|'door'|'window' = op.openingType as any;
-          out.push([label, typeLabel[t], r2(heightM), r2(lengthM), r2(verticalAreaM2)]);
-          idxOp++;
-        }
+      if (openings) {
+        const counts = { opening: 0, door: 0, window: 0 } as Record<'opening'|'door'|'window', number>;
+        for (const op of openings as any[]) { counts[op.openingType as 'opening'|'door'|'window'] += 1; }
+        out.push(['Двери, шт', r2(counts.door)]);
+        out.push(['Окна, шт', r2(counts.window)]);
+        out.push(['Проёмы, шт', r2(counts.opening)]);
       }
       // Демонтаж детально
       out.push(['']); out.push(['Демонтаж']); out.push(['Стена', 'Длина, м', 'Площадь, м²', 'Высота, м']);
